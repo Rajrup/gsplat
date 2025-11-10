@@ -12,7 +12,13 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 INSTALL_PREFIX="$HOME/.local"
+TOOLS_DIR="$HOME/tools"
 NUM_CORES=$(nproc)
+
+# Version numbers
+DRACO_VERSION="1.5.7"
+PCL_VERSION="1.15.1"
+OPEN3D_VERSION="v0.19.0"
 
 echo -e "${BLUE}=== Dependency Installation Script ===${NC}"
 echo "Installation prefix: $INSTALL_PREFIX"
@@ -74,7 +80,7 @@ if pkg-config --exists pcl_common 2>/dev/null; then
     PCL_FOUND=true
 else
     # Check common locations
-    for location in "$HOME/.local" "$HOME/tools/pcl-1.15.1/install" "/usr/local" "/usr"; do
+    for location in "$HOME/.local" "$TOOLS_DIR/pcl-$PCL_VERSION/install" "/usr/local" "/usr"; do
         if [ -f "$location/lib/pkgconfig/pcl_common.pc" ] || [ -f "$location/lib/cmake/pcl/PCLConfig.cmake" ]; then
             PCL_ROOT="$location"
             echo -e "${GREEN}[FOUND]${NC} PCL at $PCL_ROOT"
@@ -85,17 +91,17 @@ else
 fi
 
 if [ "$PCL_FOUND" = false ]; then
-    echo -e "${YELLOW}[NOT FOUND]${NC} Installing PCL 1.15.1 to $INSTALL_PREFIX"
+    echo -e "${YELLOW}[NOT FOUND]${NC} Installing PCL $PCL_VERSION to $INSTALL_PREFIX"
 
-    mkdir -p ~/build-libs
-    cd ~/build-libs
+    mkdir -p $TOOLS_DIR
+    cd $TOOLS_DIR
 
-    if [ ! -d "pcl" ]; then
-        git clone https://github.com/PointCloudLibrary/pcl.git pcl
+    if [ ! -d "pcl-$PCL_VERSION" ]; then
+        git clone https://github.com/PointCloudLibrary/pcl.git pcl-$PCL_VERSION
     fi
-    cd pcl
+    cd pcl-$PCL_VERSION
     git fetch --tags
-    git checkout pcl-1.15.1
+    git checkout tags/$PCL_VERSION -b origin/main
 
     mkdir -p build
     cd build
@@ -130,7 +136,7 @@ DRACO_FOUND=false
 DRACO_ROOT=""
 
 # Check common locations
-for location in "$HOME/.local" "$HOME/tools/draco-1.5.7/install" "/usr/local" "/usr"; do
+for location in "$HOME/.local" "$TOOLS_DIR/draco-$DRACO_VERSION/install" "/usr/local" "/usr"; do
     if [ -f "$location/lib/cmake/draco/dracoConfig.cmake" ] || [ -f "$location/lib/libdraco.so" ]; then
         DRACO_ROOT="$location"
         echo -e "${GREEN}[FOUND]${NC} Draco at $DRACO_ROOT"
@@ -140,17 +146,17 @@ for location in "$HOME/.local" "$HOME/tools/draco-1.5.7/install" "/usr/local" "/
 done
 
 if [ "$DRACO_FOUND" = false ]; then
-    echo -e "${YELLOW}[NOT FOUND]${NC} Installing Draco 1.5.7 to $INSTALL_PREFIX"
+    echo -e "${YELLOW}[NOT FOUND]${NC} Installing Draco $DRACO_VERSION to $INSTALL_PREFIX"
 
-    mkdir -p ~/build-libs
-    cd ~/build-libs
+    mkdir -p $TOOLS_DIR
+    cd $TOOLS_DIR
 
-    if [ ! -d "draco" ]; then
-        git clone https://github.com/google/draco.git draco
+    if [ ! -d "draco-$DRACO_VERSION" ]; then
+        git clone https://github.com/google/draco.git draco-$DRACO_VERSION
     fi
-    cd draco
+    cd draco-$DRACO_VERSION
     git fetch --tags
-    git checkout 1.5.7
+    git checkout tags/$DRACO_VERSION -b origin/main
 
     mkdir -p build
     cd build
@@ -179,7 +185,7 @@ OPEN3D_FOUND=false
 OPEN3D_ROOT=""
 
 # Check common locations
-for location in "$HOME/.local" "$HOME/tools/open3d-v0.19.0/install" "/usr/local" "/usr"; do
+for location in "$HOME/.local" "$TOOLS_DIR/open3d-$OPEN3D_VERSION/install" "/usr/local" "/usr"; do
     if [ -f "$location/lib/cmake/Open3D/Open3DConfig.cmake" ] || [ -f "$location/lib/libOpen3D.so" ]; then
         OPEN3D_ROOT="$location"
         echo -e "${GREEN}[FOUND]${NC} Open3D at $OPEN3D_ROOT"
@@ -189,17 +195,17 @@ for location in "$HOME/.local" "$HOME/tools/open3d-v0.19.0/install" "/usr/local"
 done
 
 if [ "$OPEN3D_FOUND" = false ]; then
-    echo -e "${YELLOW}[NOT FOUND]${NC} Installing Open3D v0.19.0 to $INSTALL_PREFIX"
+    echo -e "${YELLOW}[NOT FOUND]${NC} Installing Open3D $OPEN3D_VERSION to $INSTALL_PREFIX"
 
-    mkdir -p ~/build-libs
-    cd ~/build-libs
+    mkdir -p $TOOLS_DIR
+    cd $TOOLS_DIR
 
-    if [ ! -d "Open3D" ]; then
-        git clone --recursive https://github.com/isl-org/Open3D.git Open3D
+    if [ ! -d "open3d-$OPEN3D_VERSION" ]; then
+        git clone --recursive https://github.com/isl-org/Open3D.git open3d-$OPEN3D_VERSION
     fi
-    cd Open3D
+    cd open3d-$OPEN3D_VERSION
     git fetch --tags
-    git checkout v0.19.0
+    git checkout tags/$OPEN3D_VERSION -b origin/main
     git submodule update --init --recursive
 
     mkdir -p build
