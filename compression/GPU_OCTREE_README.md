@@ -13,6 +13,54 @@ This implementation achieves **32:1 compression ratio** with **~4ms compression*
 
 ---
 
+## Installation
+
+```{shell}
+cd gsplat/compression
+mkdir build
+# check below for cmake options
+```
+
+The CMakeLists.txt now supports 3 ways to specify CUDA installation:
+
+  1. Auto-detection (Default)
+
+```{shell}
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+  cmake --build build -j$(nproc)
+```
+
+  2. CMake Option (User-specified)
+
+```{shell}
+  cmake -S . -B build -DCUDA_ROOT=/custom/path/to/cuda -DCMAKE_BUILD_TYPE=Release
+  cmake --build build -j$(nproc)
+```
+
+  3. Environment Variable
+
+```{shell}
+  export CUDA_ROOT=/custom/path/to/cuda
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+  cmake --build build -j$(nproc)
+```
+
+  Or:
+
+```{shell}
+  export CUDA_HOME=/custom/path/to/cuda  # Alternative variable
+  cmake -S . -B build
+```
+
+  Priority Order:
+
+  1. CMake option (-DCUDA_ROOT=...) - Highest priority
+  2. Environment variable ($CUDA_ROOT or $CUDA_HOME)
+  3. Auto-detection - Fallback
+
+
+---
+
 ## Algorithm: Compression
 
 ### Step 1: Input Preprocessing
