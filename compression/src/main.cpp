@@ -9,53 +9,54 @@
 #include "utils.h"
 #include "compression.h"
 
+using namespace std;
 namespace fs = std::filesystem;
 
 // Helper function to validate lossless compression
-bool validate_lossless_compression(const std::vector<Point3D>& original, const std::string& decompressed_path) {
+bool validate_lossless_compression(const vector<Point3D>& original, const string& decompressed_path) {
     // Read decompressed points
-    std::vector<Point3D> decompressed = read_ply_geometry(decompressed_path);
+    vector<Point3D> decompressed = read_ply_geometry(decompressed_path);
 
     if (decompressed.empty()) {
-        std::cerr << "  [VALIDATION FAILED] Could not read decompressed file" << std::endl;
+        cerr << "  [VALIDATION FAILED] Could not read decompressed file" << endl;
         return false;
     }
 
     // Create sets for comparison (octree compression deduplicates identical voxel positions)
-    std::set<Point3D> original_set(original.begin(), original.end());
-    std::set<Point3D> decompressed_set(decompressed.begin(), decompressed.end());
+    set<Point3D> original_set(original.begin(), original.end());
+    set<Point3D> decompressed_set(decompressed.begin(), decompressed.end());
 
     // Check if sets match
     if (original_set == decompressed_set) {
-        std::cout << "  [VALIDATION PASSED] Compression is LOSSLESS" << std::endl;
-        std::cout << "  Original unique points: " << original_set.size() << std::endl;
-        std::cout << "  Decompressed points: " << decompressed_set.size() << std::endl;
+        cout << "  [VALIDATION PASSED] Compression is LOSSLESS" << endl;
+        cout << "  Original unique points: " << original_set.size() << endl;
+        cout << "  Decompressed points: " << decompressed_set.size() << endl;
         if (original.size() != original_set.size()) {
-            std::cout << "  Note: Original had " << (original.size() - original_set.size())
-                      << " duplicate voxel positions (expected for voxelized data)" << std::endl;
+            cout << "  Note: Original had " << (original.size() - original_set.size())
+                      << " duplicate voxel positions (expected for voxelized data)" << endl;
         }
         return true;
     } else {
-        std::cerr << "  [VALIDATION FAILED] Point sets do not match!" << std::endl;
-        std::cerr << "  Original unique points: " << original_set.size() << std::endl;
-        std::cerr << "  Decompressed points: " << decompressed_set.size() << std::endl;
+        cerr << "  [VALIDATION FAILED] Point sets do not match!" << endl;
+        cerr << "  Original unique points: " << original_set.size() << endl;
+        cerr << "  Decompressed points: " << decompressed_set.size() << endl;
 
         // Find differences
-        std::set<Point3D> missing_in_decompressed;
-        std::set_difference(original_set.begin(), original_set.end(),
+        set<Point3D> missing_in_decompressed;
+        set_difference(original_set.begin(), original_set.end(),
                            decompressed_set.begin(), decompressed_set.end(),
-                           std::inserter(missing_in_decompressed, missing_in_decompressed.begin()));
+                           inserter(missing_in_decompressed, missing_in_decompressed.begin()));
 
-        std::set<Point3D> extra_in_decompressed;
-        std::set_difference(decompressed_set.begin(), decompressed_set.end(),
+        set<Point3D> extra_in_decompressed;
+        set_difference(decompressed_set.begin(), decompressed_set.end(),
                            original_set.begin(), original_set.end(),
-                           std::inserter(extra_in_decompressed, extra_in_decompressed.begin()));
+                           inserter(extra_in_decompressed, extra_in_decompressed.begin()));
 
         if (!missing_in_decompressed.empty()) {
-            std::cerr << "  Missing in decompressed: " << missing_in_decompressed.size() << " points" << std::endl;
+            cerr << "  Missing in decompressed: " << missing_in_decompressed.size() << " points" << endl;
         }
         if (!extra_in_decompressed.empty()) {
-            std::cerr << "  Extra in decompressed: " << extra_in_decompressed.size() << " points" << std::endl;
+            cerr << "  Extra in decompressed: " << extra_in_decompressed.size() << " points" << endl;
         }
 
         return false;
@@ -80,14 +81,14 @@ void print_usage(const char* program_name) {
 
 int main(int argc, char* argv[]) {
     // Parse command-line arguments
-    std::string input_folder;
-    std::string output_base;
+    string input_folder;
+    string output_base;
     int max_files = 10;
     std::string device_str = "cuda:0";
     int octree_depth = 10;
 
     for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
+        string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
             print_usage(argv[0]);
             return 0;
@@ -95,7 +96,7 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc) {
                 input_folder = argv[++i];
             } else {
-                std::cerr << "Error: -i requires an argument\n";
+                cerr << "Error: -i requires an argument\n";
                 print_usage(argv[0]);
                 return 1;
             }
@@ -103,15 +104,15 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc) {
                 output_base = argv[++i];
             } else {
-                std::cerr << "Error: -o requires an argument\n";
+                cerr << "Error: -o requires an argument\n";
                 print_usage(argv[0]);
                 return 1;
             }
         } else if (arg == "-n" || arg == "--num") {
             if (i + 1 < argc) {
-                max_files = std::stoi(argv[++i]);
+                max_files = stoi(argv[++i]);
             } else {
-                std::cerr << "Error: -n requires an argument\n";
+                cerr << "Error: -n requires an argument\n";
                 print_usage(argv[0]);
                 return 1;
             }
@@ -136,7 +137,7 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
         } else {
-            std::cerr << "Error: Unknown argument " << arg << "\n";
+            cerr << "Error: Unknown argument " << arg << "\n";
             print_usage(argv[0]);
             return 1;
         }
@@ -144,7 +145,7 @@ int main(int argc, char* argv[]) {
 
     // Validate required arguments
     if (input_folder.empty() || output_base.empty()) {
-        std::cerr << "Error: Missing required arguments\n\n";
+        cerr << "Error: Missing required arguments\n\n";
         print_usage(argv[0]);
         return 1;
     }
@@ -189,7 +190,7 @@ int main(int argc, char* argv[]) {
 
     // Validate input folder exists
     if (!fs::exists(input_folder) || !fs::is_directory(input_folder)) {
-        std::cerr << "Error: Input folder does not exist or is not a directory: " << input_folder << "\n";
+        cerr << "Error: Input folder does not exist or is not a directory: " << input_folder << "\n";
         return 1;
     }
 
@@ -206,7 +207,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Octree depth: " << octree_depth << " (grid size: " << (1 << octree_depth) << "^3)\n\n";
 
     // Get list of PLY files and sort them
-    std::vector<std::string> ply_files;
+    vector<string> ply_files;
     for (const auto& entry : fs::directory_iterator(input_folder)) {
         if (entry.is_regular_file() && entry.path().extension() == ".ply") {
             ply_files.push_back(entry.path().string());
@@ -214,40 +215,40 @@ int main(int argc, char* argv[]) {
     }
 
     if (ply_files.empty()) {
-        std::cerr << "Error: No PLY files found in " << input_folder << "\n";
+        cerr << "Error: No PLY files found in " << input_folder << "\n";
         return 1;
     }
 
     // Sort files to get first N
-    std::sort(ply_files.begin(), ply_files.end());
+    sort(ply_files.begin(), ply_files.end());
 
     // Process first N files
-    int num_files = std::min(max_files, static_cast<int>(ply_files.size()));
+    int num_files = min(max_files, static_cast<int>(ply_files.size()));
     
-    std::cout << "Processing " << num_files << " PLY files..." << std::endl;
-    std::cout << "=========================================" << std::endl;
+    cout << "Processing " << num_files << " PLY files..." << endl;
+    cout << "=========================================" << endl;
     
     for (int i = 0; i < num_files; ++i) {
-        std::string input_file = ply_files[i];
+        string input_file = ply_files[i];
         fs::path input_path(input_file);
-        std::string filename = input_path.stem().string(); // e.g., "redandblack_vox10_1450"
+        string filename = input_path.stem().string(); // e.g., "redandblack_vox10_1450"
         
         // Extract point cloud number (last part after underscore)
         size_t last_underscore = filename.find_last_of('_');
-        std::string ptcl_number = (last_underscore != std::string::npos) ? 
+        string ptcl_number = (last_underscore != string::npos) ? 
                                   filename.substr(last_underscore + 1) : filename;
         
-        std::cout << "\nProcessing file " << (i + 1) << "/" << num_files << ": " << input_path.filename().string() << std::endl;
-        std::cout << "Point cloud number: " << ptcl_number << std::endl;
+        cout << "\nProcessing file " << (i + 1) << "/" << num_files << ": " << input_path.filename().string() << endl;
+        cout << "Point cloud number: " << ptcl_number << endl;
         
         // Read point cloud geometry once
-        std::cout << "Reading point cloud geometry..." << std::endl;
-        std::vector<Point3D> points = read_ply_geometry(input_file);
+        cout << "Reading point cloud geometry..." << endl;
+        vector<Point3D> points = read_ply_geometry(input_file);
         if (points.empty()) {
-            std::cerr << "Error: Failed to read point cloud from " << input_file << std::endl;
+            cerr << "Error: Failed to read point cloud from " << input_file << endl;
             continue;
         }
-        std::cout << "Loaded " << points.size() << " points" << std::endl;
+        cout << "Loaded " << points.size() << " points" << endl;
         
         // Validate that all coordinates are within [0, 1023] range for voxelized coordinates
         for (const auto& pt : points) {
@@ -256,72 +257,72 @@ int main(int argc, char* argv[]) {
         }
         
         // PCL Compression
-        std::cout << "\n--- PCL Compression ---" << std::endl;
+        cout << "\n--- PCL Compression ---" << endl;
         CompressionResult pcl_result = compress_pcl(points);
         if (pcl_result.compression_time_ms > 0) {
-            std::cout << "Original size: " << pcl_result.original_size_bytes << " bytes (" 
-                      << (pcl_result.original_size_bytes / 1024.0) << " KB)" << std::endl;
-            std::cout << "Compressed size: " << pcl_result.compressed_size_bytes << " bytes (" 
-                      << (pcl_result.compressed_size_bytes / 1024.0) << " KB)" << std::endl;
-            std::cout << "Compression ratio: " << (double)pcl_result.original_size_bytes / pcl_result.compressed_size_bytes 
-                      << ":1" << std::endl;
-            std::cout << "Compression time: " << pcl_result.compression_time_ms << " ms" << std::endl;
-            std::string pcl_output = output_base + "/pcl/" + ptcl_number + ".ply";
+            cout << "Original size: " << pcl_result.original_size_bytes << " bytes (" 
+                      << (pcl_result.original_size_bytes / 1024.0) << " KB)" << endl;
+            cout << "Compressed size: " << pcl_result.compressed_size_bytes << " bytes (" 
+                      << (pcl_result.compressed_size_bytes / 1024.0) << " KB)" << endl;
+            cout << "Compression ratio: " << (double)pcl_result.original_size_bytes / pcl_result.compressed_size_bytes 
+                      << ":1" << endl;
+            cout << "Compression time: " << pcl_result.compression_time_ms << " ms" << endl;
+            string pcl_output = output_base + "/pcl/" + ptcl_number + ".ply";
             DecompressionResult pcl_decomp = decompress_pcl(pcl_result.compressed_data, pcl_output);
             if (pcl_decomp.success) {
-                std::cout << "Decompression time: " << pcl_decomp.decompression_time_ms << " ms" << std::endl;
-                std::cout << "Decompressed and saved to: " << pcl_output << std::endl;
+                cout << "Decompression time: " << pcl_decomp.decompression_time_ms << " ms" << endl;
+                cout << "Decompressed and saved to: " << pcl_output << endl;
             } else {
-                std::cerr << "Failed to decompress PCL" << std::endl;
+                cerr << "Failed to decompress PCL" << endl;
             }
         } else {
-            std::cerr << "Failed to compress with PCL" << std::endl;
+            cerr << "Failed to compress with PCL" << endl;
         }
         
         // Open3D Compression
-        std::cout << "\n--- Open3D Compression ---" << std::endl;
+        cout << "\n--- Open3D Compression ---" << endl;
         CompressionResult open3d_result = compress_open3d(points);
         if (open3d_result.compression_time_ms > 0) {
-            std::cout << "Original size: " << open3d_result.original_size_bytes << " bytes (" 
-                      << (open3d_result.original_size_bytes / 1024.0) << " KB)" << std::endl;
-            std::cout << "Compressed size: " << open3d_result.compressed_size_bytes << " bytes (" 
-                      << (open3d_result.compressed_size_bytes / 1024.0) << " KB)" << std::endl;
-            std::cout << "Compression ratio: " << (double)open3d_result.original_size_bytes / open3d_result.compressed_size_bytes 
-                      << ":1" << std::endl;
-            std::cout << "Compression time: " << open3d_result.compression_time_ms << " ms" << std::endl;
-            std::string open3d_output = output_base + "/open3d/" + ptcl_number + ".ply";
+            cout << "Original size: " << open3d_result.original_size_bytes << " bytes (" 
+                      << (open3d_result.original_size_bytes / 1024.0) << " KB)" << endl;
+            cout << "Compressed size: " << open3d_result.compressed_size_bytes << " bytes (" 
+                      << (open3d_result.compressed_size_bytes / 1024.0) << " KB)" << endl;
+            cout << "Compression ratio: " << (double)open3d_result.original_size_bytes / open3d_result.compressed_size_bytes 
+                      << ":1" << endl;
+            cout << "Compression time: " << open3d_result.compression_time_ms << " ms" << endl;
+            string open3d_output = output_base + "/open3d/" + ptcl_number + ".ply";
             DecompressionResult open3d_decomp = decompress_open3d(open3d_result.compressed_data, open3d_output);
             if (open3d_decomp.success) {
-                std::cout << "Decompression time: " << open3d_decomp.decompression_time_ms << " ms" << std::endl;
-                std::cout << "Decompressed and saved to: " << open3d_output << std::endl;
+                cout << "Decompression time: " << open3d_decomp.decompression_time_ms << " ms" << endl;
+                cout << "Decompressed and saved to: " << open3d_output << endl;
             } else {
-                std::cerr << "Failed to decompress Open3D" << std::endl;
+                cerr << "Failed to decompress Open3D" << endl;
             }
         } else {
-            std::cerr << "Failed to compress with Open3D" << std::endl;
+            cerr << "Failed to compress with Open3D" << endl;
         }
         
         // Draco Compression
-        std::cout << "\n--- Draco Compression ---" << std::endl;
+        cout << "\n--- Draco Compression ---" << endl;
         CompressionResult draco_result = compress_draco(points);
         if (draco_result.compression_time_ms > 0) {
-            std::cout << "Original size: " << draco_result.original_size_bytes << " bytes (" 
-                      << (draco_result.original_size_bytes / 1024.0) << " KB)" << std::endl;
-            std::cout << "Compressed size: " << draco_result.compressed_size_bytes << " bytes (" 
-                      << (draco_result.compressed_size_bytes / 1024.0) << " KB)" << std::endl;
-            std::cout << "Compression ratio: " << (double)draco_result.original_size_bytes / draco_result.compressed_size_bytes 
-                      << ":1" << std::endl;
-            std::cout << "Compression time: " << draco_result.compression_time_ms << " ms" << std::endl;
-            std::string draco_output = output_base + "/draco/" + ptcl_number + ".ply";
+            cout << "Original size: " << draco_result.original_size_bytes << " bytes (" 
+                      << (draco_result.original_size_bytes / 1024.0) << " KB)" << endl;
+            cout << "Compressed size: " << draco_result.compressed_size_bytes << " bytes (" 
+                      << (draco_result.compressed_size_bytes / 1024.0) << " KB)" << endl;
+            cout << "Compression ratio: " << (double)draco_result.original_size_bytes / draco_result.compressed_size_bytes 
+                      << ":1" << endl;
+            cout << "Compression time: " << draco_result.compression_time_ms << " ms" << endl;
+            string draco_output = output_base + "/draco/" + ptcl_number + ".ply";
             DecompressionResult draco_decomp = decompress_draco(draco_result.compressed_data, draco_output);
             if (draco_decomp.success) {
-                std::cout << "Decompression time: " << draco_decomp.decompression_time_ms << " ms" << std::endl;
-                std::cout << "Decompressed and saved to: " << draco_output << std::endl;
+                cout << "Decompression time: " << draco_decomp.decompression_time_ms << " ms" << endl;
+                cout << "Decompressed and saved to: " << draco_output << endl;
             } else {
-                std::cerr << "Failed to decompress Draco" << std::endl;
+                cerr << "Failed to decompress Draco" << endl;
             }
         } else {
-            std::cerr << "Failed to compress with Draco" << std::endl;
+            cerr << "Failed to compress with Draco" << endl;
         }
         
         // GPU Octree Compression
@@ -355,10 +356,10 @@ int main(int argc, char* argv[]) {
             std::cout << "Skipped (CPU mode selected)" << std::endl;
         }
         
-        std::cout << "\n=========================================" << std::endl;
+        cout << "\n=========================================" << endl;
     }
     
-    std::cout << "\nAll files processed!" << std::endl;
+    cout << "\nAll files processed!" << endl;
     return 0;
 }
 

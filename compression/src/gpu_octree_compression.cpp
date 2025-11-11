@@ -193,10 +193,45 @@ CompressionResult compress_gpu_octree(const std::vector<Point3D>& points, uint32
         all_levels[d].resize(parent_end - all_levels[d].begin());
     }
 
-    // Generate BFS occupancy stream
-    thrust::device_vector<uint8_t> d_bfs_stream;
-    d_bfs_stream.reserve(N * 2);
-
+    // Generate BFS occupancy stream and serialize on GPU
+    // Format: [num_levels (4 bytes)][level_sizes... (4 bytes each)][bfs_stream...]
+    uint32_t num_levels = octree_depth + 1;
+    
+    // Collect level sizes (needed for serialization)
+    std::vector<uint32_t> level_sizes(num_levels);
+    for (uint32_t d = 0; d <= octree_depth; ++d) {
+        level_sizes[d] = all_levels[d].size();
+    }
+    
+    // Calculate total BFS stream size
+    size_t total_bfs_size = 0;
+    for (uint32_t d = 0; d < octree_depth; ++d) {
+        total_bfs_size += all_levels[d].size();
+    }
+    
+    // Allocate serialized bytestream on GPU
+    size_t serialized_size = sizeof(uint32_t) + sizeof(uint32_t) * num_levels + total_bfs_size;
+    thrust::device_vector<uint8_t> d_serialized(serialized_size);
+    
+    // Copy metadata to GPU
+    size_t offset = 0;
+    
+    // Copy num_levels
+    checkCudaErrors(cudaMemcpy(
+        thrust::raw_pointer_cast(d_serialized.data()) + offset,
+        &num_levels, sizeof(uint32_t), cudaMemcpyHostToDevice));
+    offset += sizeof(uint32_t);
+    
+    // Copy level sizes
+    thrust::device_vector<uint32_t> d_level_sizes = level_sizes;
+    checkCudaErrors(cudaMemcpy(
+        thrust::raw_pointer_cast(d_serialized.data()) + offset,
+        thrust::raw_pointer_cast(d_level_sizes.data()),
+        sizeof(uint32_t) * num_levels, cudaMemcpyDeviceToDevice));
+    offset += sizeof(uint32_t) * num_levels;
+    
+    // Generate BFS occupancy stream and copy directly into serialized buffer
+    size_t bfs_offset = offset;
     for (uint32_t d = 0; d < octree_depth; ++d) {
         int num_parents = all_levels[d].size();
         int num_children = all_levels[d+1].size();
@@ -212,35 +247,15 @@ CompressionResult compress_gpu_octree(const std::vector<Point3D>& points, uint32
         );
         checkCudaErrors(cudaGetLastError());
 
-        d_bfs_stream.insert(d_bfs_stream.end(), d_level_occupancy.begin(), d_level_occupancy.end());
+        // Copy occupancy directly into serialized buffer at correct offset
+        thrust::copy(d_level_occupancy.begin(), d_level_occupancy.end(),
+                     d_serialized.begin() + bfs_offset);
+        bfs_offset += num_parents;
     }
 
-    // Copy compressed data to host
-    thrust::host_vector<uint8_t> h_bfs_stream = d_bfs_stream;
-
-    // Serialize metadata and compressed data
-    // Optimized format for voxelized coordinates: [num_levels (4 bytes)][level_sizes...][bfs_stream...]
-    // Note: octree_depth is passed as parameter, not stored. min_b, max_b, and grid_dim are fixed - no need to store
-    result.compressed_data.clear();
-    
-    // Write metadata (reduced size - no octree_depth, bounds or grid_dim needed)
-    uint32_t num_levels = octree_depth + 1;
-    
-    result.compressed_data.resize(sizeof(uint32_t) + sizeof(uint32_t) * num_levels + h_bfs_stream.size());
-    size_t offset = 0;
-    
-    std::memcpy(result.compressed_data.data() + offset, &num_levels, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    
-    // Write level sizes
-    for (uint32_t d = 0; d <= octree_depth; ++d) {
-        uint32_t level_size = all_levels[d].size();
-        std::memcpy(result.compressed_data.data() + offset, &level_size, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-    }
-    
-    // Write BFS stream
-    std::memcpy(result.compressed_data.data() + offset, h_bfs_stream.data(), h_bfs_stream.size());
+    // Copy final serialized bytestream from GPU to CPU (single transfer)
+    thrust::host_vector<uint8_t> h_serialized = d_serialized;
+    result.compressed_data.assign(h_serialized.begin(), h_serialized.end());
 
     result.compression_time_ms = sw.ElapsedMs();
 
