@@ -15,8 +15,9 @@ This implementation achieves **32:1 compression ratio** with **~4ms compression*
 
 ## Installation
 
+For dependencies, run `install_dependencies.sh`.
+
 ```{shell}
-cd gsplat/compression
 mkdir build
 # check below for cmake options
 ```
@@ -58,6 +59,27 @@ The CMakeLists.txt now supports 3 ways to specify CUDA installation:
   2. Environment variable ($CUDA_ROOT or $CUDA_HOME)
   3. Auto-detection - Fallback
 
+You will get `pointcloud_compression` and `gpu_octree_compression` in `compression/build`.
+
+---
+
+## Usage Examples
+
+```{shell}
+# Use default settings (cuda:0, depth=10)
+./pointcloud_compression -i ./input_ply_folder -o ./results
+
+# Use CUDA device 1 with depth 10
+./pointcloud_compression -i ./input_ply_folder -o ./results -d cuda:1 -t 10
+
+# Process 5 files on CUDA device 0 with depth 6
+./pointcloud_compression -i ./input_ply_folder -o ./results -n 5 -d cuda:0 -t 6
+
+# CPU mode (GPU octree will be skipped)
+./pointcloud_compression -i ./input_ply_folder -o ./results -d cpu
+```
+
+Check `./pointcloud_compression -h` for more details.
 
 ---
 
