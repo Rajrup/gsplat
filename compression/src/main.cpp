@@ -64,19 +64,19 @@ bool validate_lossless_compression(const vector<Point3D>& original, const string
 }
 
 void print_usage(const char* program_name) {
-    std::cout << "Usage: " << program_name << " -i <input_folder> -o <output_folder> [options]\n\n";
-    std::cout << "Required arguments:\n";
-    std::cout << "  -i, --input <folder>     Input folder containing PLY files\n";
-    std::cout << "  -o, --output <folder>    Output base folder for compressed results\n\n";
-    std::cout << "Optional arguments:\n";
-    std::cout << "  -n, --num <count>        Max number of files to process (default: 10)\n";
-    std::cout << "  -d, --device <device>    CUDA device to use (e.g., cuda:0, cuda:1) (default: cuda:0)\n";
-    std::cout << "  -t, --depth <depth>      Octree depth for GPU octree compression (default: 10)\n";
-    std::cout << "  -h, --help               Show this help message\n\n";
-    std::cout << "Examples:\n";
-    std::cout << "  " << program_name << " -i ./input_ply -o ./results -n 5\n";
-    std::cout << "  " << program_name << " -i ./input_ply -o ./results -d cuda:1 -t 10\n\n";
-    std::cout << "Note: PLY files must have point coordinates in [0, 1023] range.\n";
+    cout << "Usage: " << program_name << " -i <input_folder> -o <output_folder> [options]\n\n";
+    cout << "Required arguments:\n";
+    cout << "  -i, --input <folder>     Input folder containing PLY files\n";
+    cout << "  -o, --output <folder>    Output base folder for compressed results\n\n";
+    cout << "Optional arguments:\n";
+    cout << "  -n, --num <count>        Max number of files to process (default: 10)\n";
+    cout << "  -d, --device <device>    CUDA device to use (e.g., cuda:0, cuda:1) (default: cuda:0)\n";
+    cout << "  -t, --depth <depth>      Octree depth for GPU octree compression (default: 10)\n";
+    cout << "  -h, --help               Show this help message\n\n";
+    cout << "Examples:\n";
+    cout << "  " << program_name << " -i ./input_ply -o ./results -n 5\n";
+    cout << "  " << program_name << " -i ./input_ply -o ./results -d cuda:1 -t 10\n\n";
+    cout << "Note: PLY files must have point coordinates in [0, 1023] range.\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -84,7 +84,7 @@ int main(int argc, char* argv[]) {
     string input_folder;
     string output_base;
     int max_files = 10;
-    std::string device_str = "cuda:0";
+    string device_str = "cuda:0";
     int octree_depth = 10;
 
     for (int i = 1; i < argc; ++i) {
@@ -120,19 +120,19 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc) {
                 device_str = argv[++i];
             } else {
-                std::cerr << "Error: -d requires an argument\n";
+                cerr << "Error: -d requires an argument\n";
                 print_usage(argv[0]);
                 return 1;
             }
         } else if (arg == "-t" || arg == "--depth") {
             if (i + 1 < argc) {
-                octree_depth = std::stoi(argv[++i]);
+                octree_depth = stoi(argv[++i]);
                 if (octree_depth < 1 || octree_depth > 10) {
-                    std::cerr << "Error: Octree depth must be between 1 and 10\n";
+                    cerr << "Error: Octree depth must be between 1 and 10\n";
                     return 1;
                 }
             } else {
-                std::cerr << "Error: -t requires an argument\n";
+                cerr << "Error: -t requires an argument\n";
                 print_usage(argv[0]);
                 return 1;
             }
@@ -154,9 +154,9 @@ int main(int argc, char* argv[]) {
     int cuda_device = 0;
     if (device_str.substr(0, 5) == "cuda:") {
         try {
-            cuda_device = std::stoi(device_str.substr(5));
-        } catch (const std::exception& e) {
-            std::cerr << "Error: Invalid device string format. Use 'cuda:N' where N is the device number.\n";
+            cuda_device = stoi(device_str.substr(5));
+        } catch (const exception& e) {
+            cerr << "Error: Invalid device string format. Use 'cuda:N' where N is the device number.\n";
             return 1;
         }
 
@@ -164,27 +164,27 @@ int main(int argc, char* argv[]) {
         int device_count = 0;
         cudaError_t err = cudaGetDeviceCount(&device_count);
         if (err != cudaSuccess) {
-            std::cerr << "Error: Failed to get CUDA device count: " << cudaGetErrorString(err) << "\n";
+            cerr << "Error: Failed to get CUDA device count: " << cudaGetErrorString(err) << "\n";
             return 1;
         }
 
         if (cuda_device >= device_count || cuda_device < 0) {
-            std::cerr << "Error: CUDA device " << cuda_device << " is not available. ";
-            std::cerr << "Available devices: 0-" << (device_count - 1) << "\n";
+            cerr << "Error: CUDA device " << cuda_device << " is not available. ";
+            cerr << "Available devices: 0-" << (device_count - 1) << "\n";
             return 1;
         }
 
         // Set CUDA device
         err = cudaSetDevice(cuda_device);
         if (err != cudaSuccess) {
-            std::cerr << "Error: Failed to set CUDA device " << cuda_device << ": " << cudaGetErrorString(err) << "\n";
+            cerr << "Error: Failed to set CUDA device " << cuda_device << ": " << cudaGetErrorString(err) << "\n";
             return 1;
         }
     } else if (device_str == "cpu") {
-        std::cerr << "Warning: CPU mode is not implemented. GPU octree compression requires CUDA.\n";
-        std::cerr << "         GPU octree compression will be skipped.\n";
+        cerr << "Warning: CPU mode is not implemented. GPU octree compression requires CUDA.\n";
+        cerr << "         GPU octree compression will be skipped.\n";
     } else {
-        std::cerr << "Error: Invalid device string. Use 'cuda:N' or 'cpu'.\n";
+        cerr << "Error: Invalid device string. Use 'cuda:N' or 'cpu'.\n";
         return 1;
     }
 
@@ -200,11 +200,11 @@ int main(int argc, char* argv[]) {
     fs::create_directories(output_base + "/draco");
     fs::create_directories(output_base + "/gpu_octree");
 
-    std::cout << "Input folder: " << input_folder << "\n";
-    std::cout << "Output folder: " << output_base << "\n";
-    std::cout << "Max files to process: " << max_files << "\n";
-    std::cout << "CUDA device: " << device_str << "\n";
-    std::cout << "Octree depth: " << octree_depth << " (grid size: " << (1 << octree_depth) << "^3)\n\n";
+    cout << "Input folder: " << input_folder << "\n";
+    cout << "Output folder: " << output_base << "\n";
+    cout << "Max files to process: " << max_files << "\n";
+    cout << "CUDA device: " << device_str << "\n";
+    cout << "Octree depth: " << octree_depth << " (grid size: " << (1 << octree_depth) << "^3)\n\n";
 
     // Get list of PLY files and sort them
     vector<string> ply_files;
@@ -326,34 +326,34 @@ int main(int argc, char* argv[]) {
         }
         
         // GPU Octree Compression
-        std::cout << "\n--- GPU Octree Compression ---" << std::endl;
+        cout << "\n--- GPU Octree Compression ---" << endl;
         if (device_str != "cpu") {
             CompressionResult gpu_octree_result = compress_gpu_octree(points, octree_depth);
             if (gpu_octree_result.compression_time_ms > 0) {
-                std::cout << "Original size: " << gpu_octree_result.original_size_bytes << " bytes ("
-                          << (gpu_octree_result.original_size_bytes / 1024.0) << " KB)" << std::endl;
-                std::cout << "Compressed size: " << gpu_octree_result.compressed_size_bytes << " bytes ("
-                          << (gpu_octree_result.compressed_size_bytes / 1024.0) << " KB)" << std::endl;
-                std::cout << "Compression ratio: " << (double)gpu_octree_result.original_size_bytes / gpu_octree_result.compressed_size_bytes
-                          << ":1" << std::endl;
-                std::cout << "Compression time: " << gpu_octree_result.compression_time_ms << " ms" << std::endl;
-                std::string gpu_octree_output = output_base + "/gpu_octree/" + ptcl_number + ".ply";
+                cout << "Original size: " << gpu_octree_result.original_size_bytes << " bytes ("
+                          << (gpu_octree_result.original_size_bytes / 1024.0) << " KB)" << endl;
+                cout << "Compressed size: " << gpu_octree_result.compressed_size_bytes << " bytes ("
+                          << (gpu_octree_result.compressed_size_bytes / 1024.0) << " KB)" << endl;
+                cout << "Compression ratio: " << (double)gpu_octree_result.original_size_bytes / gpu_octree_result.compressed_size_bytes
+                          << ":1" << endl;
+                cout << "Compression time: " << gpu_octree_result.compression_time_ms << " ms" << endl;
+                string gpu_octree_output = output_base + "/gpu_octree/" + ptcl_number + ".ply";
                 DecompressionResult gpu_octree_decomp = decompress_gpu_octree(gpu_octree_result.compressed_data, gpu_octree_output, octree_depth);
                 if (gpu_octree_decomp.success) {
-                    std::cout << "Decompression time: " << gpu_octree_decomp.decompression_time_ms << " ms" << std::endl;
-                    std::cout << "Decompressed and saved to: " << gpu_octree_output << std::endl;
+                    cout << "Decompression time: " << gpu_octree_decomp.decompression_time_ms << " ms" << endl;
+                    cout << "Decompressed and saved to: " << gpu_octree_output << endl;
 
                     // Validate lossless compression
-                    std::cout << "\n  Validating lossless compression..." << std::endl;
+                    cout << "\n  Validating lossless compression..." << endl;
                     validate_lossless_compression(points, gpu_octree_output);
                 } else {
-                    std::cerr << "Failed to decompress GPU Octree" << std::endl;
+                    cerr << "Failed to decompress GPU Octree" << endl;
                 }
             } else {
-                std::cerr << "Failed to compress with GPU Octree" << std::endl;
+                cerr << "Failed to compress with GPU Octree" << endl;
             }
         } else {
-            std::cout << "Skipped (CPU mode selected)" << std::endl;
+            cout << "Skipped (CPU mode selected)" << endl;
         }
         
         cout << "\n=========================================" << endl;
