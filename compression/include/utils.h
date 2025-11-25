@@ -27,6 +27,10 @@ struct Point3D {
     }
 };
 
+// Forward declaration
+struct nvcompCompressionResult;
+struct nvcompDecompressionResult;
+
 /**
  * Result structure for compression operations
  */
@@ -35,6 +39,11 @@ struct CompressionResult {
     double compression_time_ms;
     size_t original_size_bytes;     // Original point cloud size (geometry only)
     size_t compressed_size_bytes;   // Compressed data size
+    
+    // Optional nvCOMP metrics (only populated when nvCOMP is used)
+    size_t serialized_size_bytes;   // Size after octree serialization (before nvCOMP)
+    double nvcomp_compression_time_ms;  // nvCOMP compression time (0 if not used)
+    bool nvcomp_used;               // Flag indicating if nvCOMP was used
 };
 
 /**
@@ -44,6 +53,10 @@ struct DecompressionResult {
     std::string output_path;
     bool success;
     double decompression_time_ms;
+    
+    // Optional nvCOMP metrics (only populated when nvCOMP is used)
+    double nvcomp_decompression_time_ms;  // nvCOMP decompression time (0 if not used)
+    bool nvcomp_used;                     // Flag indicating if nvCOMP was used
 };
 
 /**
