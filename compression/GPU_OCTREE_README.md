@@ -65,6 +65,18 @@ You will get `pointcloud_compression` and `gpu_octree_compression` in `compressi
 
 ## Usage Examples
 
+### Single File Processing
+
+```{shell}
+# Process a single PLY file with default settings (cuda:0, depth=10)
+./pointcloud_compression -i ./path/to/file.ply -o ./results
+
+# Process a single file on CUDA device 1 with depth 8
+./pointcloud_compression -i ./path/to/file.ply -o ./results -d cuda:1 -t 8
+```
+
+### Folder Processing
+
 ```{shell}
 # Use default settings (cuda:0, depth=10)
 ./pointcloud_compression -i ./input_ply_folder -o ./results
@@ -87,7 +99,8 @@ Check `./pointcloud_compression -h` for more details.
 
 ### Step 1: Input Preprocessing
 ```
-Input: Point cloud with N points, each point (x, y, z) ∈ [0, 1023]³
+Input: PLY file (single file or folder of PLY files)
+       Point cloud with N points, each point (x, y, z) ∈ [0, 1023]³
        octree_depth: desired tree depth (e.g., 10 for 1024³ resolution)
 ```
 

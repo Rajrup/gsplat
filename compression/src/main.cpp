@@ -64,16 +64,17 @@ bool validate_lossless_compression(const vector<Point3D>& original, const string
 }
 
 void print_usage(const char* program_name) {
-    cout << "Usage: " << program_name << " -i <input_folder> -o <output_folder> [options]\n\n";
+    cout << "Usage: " << program_name << " -i <input> -o <output_folder> [options]\n\n";
     cout << "Required arguments:\n";
-    cout << "  -i, --input <folder>     Input folder containing PLY files\n";
+    cout << "  -i, --input <path>       Input PLY file or folder containing PLY files\n";
     cout << "  -o, --output <folder>    Output base folder for compressed results\n\n";
     cout << "Optional arguments:\n";
-    cout << "  -n, --num <count>        Max number of files to process (default: 10)\n";
+    cout << "  -n, --num <count>        Max number of files to process (default: 10, ignored for single file)\n";
     cout << "  -d, --device <device>    CUDA device to use (e.g., cuda:0, cuda:1) (default: cuda:0)\n";
     cout << "  -t, --depth <depth>      Octree depth for GPU octree compression (default: 10)\n";
     cout << "  -h, --help               Show this help message\n\n";
     cout << "Examples:\n";
+    cout << "  " << program_name << " -i ./input.ply -o ./results\n";
     cout << "  " << program_name << " -i ./input_ply -o ./results -n 5\n";
     cout << "  " << program_name << " -i ./input_ply -o ./results -d cuda:1 -t 10\n\n";
     cout << "Note: PLY files must have point coordinates in [0, 1023] range.\n";
@@ -81,7 +82,7 @@ void print_usage(const char* program_name) {
 
 int main(int argc, char* argv[]) {
     // Parse command-line arguments
-    string input_folder;
+    string input_path;
     string output_base;
     int max_files = 10;
     string device_str = "cuda:0";
@@ -94,7 +95,7 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if (arg == "-i" || arg == "--input") {
             if (i + 1 < argc) {
-                input_folder = argv[++i];
+                input_path = argv[++i];
             } else {
                 cerr << "Error: -i requires an argument\n";
                 print_usage(argv[0]);
@@ -144,7 +145,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Validate required arguments
-    if (input_folder.empty() || output_base.empty()) {
+    if (input_path.empty() || output_base.empty()) {
         cerr << "Error: Missing required arguments\n\n";
         print_usage(argv[0]);
         return 1;
@@ -188,9 +189,18 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Validate input folder exists
-    if (!fs::exists(input_folder) || !fs::is_directory(input_folder)) {
-        cerr << "Error: Input folder does not exist or is not a directory: " << input_folder << "\n";
+    // Validate input path exists
+    if (!fs::exists(input_path)) {
+        cerr << "Error: Input path does not exist: " << input_path << "\n";
+        return 1;
+    }
+
+    // Determine if input is a file or directory
+    bool is_single_file = fs::is_regular_file(input_path);
+    bool is_directory = fs::is_directory(input_path);
+
+    if (!is_single_file && !is_directory) {
+        cerr << "Error: Input path must be a regular file or directory: " << input_path << "\n";
         return 1;
     }
 
@@ -200,27 +210,40 @@ int main(int argc, char* argv[]) {
     fs::create_directories(output_base + "/draco");
     fs::create_directories(output_base + "/gpu_octree");
 
-    cout << "Input folder: " << input_folder << "\n";
+    cout << "Input: " << input_path << (is_single_file ? " (file)" : " (folder)") << "\n";
     cout << "Output folder: " << output_base << "\n";
-    cout << "Max files to process: " << max_files << "\n";
+    if (!is_single_file) {
+        cout << "Max files to process: " << max_files << "\n";
+    }
     cout << "CUDA device: " << device_str << "\n";
     cout << "Octree depth: " << octree_depth << " (grid size: " << (1 << octree_depth) << "^3)\n\n";
 
-    // Get list of PLY files and sort them
+    // Get list of PLY files
     vector<string> ply_files;
-    for (const auto& entry : fs::directory_iterator(input_folder)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".ply") {
-            ply_files.push_back(entry.path().string());
+
+    if (is_single_file) {
+        // Single file mode
+        if (fs::path(input_path).extension() != ".ply") {
+            cerr << "Error: Input file must have .ply extension: " << input_path << "\n";
+            return 1;
         }
-    }
+        ply_files.push_back(input_path);
+    } else {
+        // Directory mode
+        for (const auto& entry : fs::directory_iterator(input_path)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".ply") {
+                ply_files.push_back(entry.path().string());
+            }
+        }
 
-    if (ply_files.empty()) {
-        cerr << "Error: No PLY files found in " << input_folder << "\n";
-        return 1;
-    }
+        if (ply_files.empty()) {
+            cerr << "Error: No PLY files found in " << input_path << "\n";
+            return 1;
+        }
 
-    // Sort files to get first N
-    sort(ply_files.begin(), ply_files.end());
+        // Sort files to get first N
+        sort(ply_files.begin(), ply_files.end());
+    }
 
     // Process first N files
     int num_files = min(max_files, static_cast<int>(ply_files.size()));
