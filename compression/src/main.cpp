@@ -8,6 +8,7 @@
 #include <cuda_runtime.h>
 #include "utils.h"
 #include "compression.h"
+#include "nvcomp_wrapper.h"
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -251,8 +252,8 @@ int main(int argc, char* argv[]) {
         cout << "Loaded " << points.size() << " points" << endl;
         
         // Validate that all coordinates are within [0, 1023] range for voxelized coordinates
-        for (const auto& pt : points) {
-            assert(pt.x <= 1023u && pt.y <= 1023u && pt.z <= 1023u &&
+        for (const auto& point : points) {
+            assert(point.x <= 1023u && point.y <= 1023u && point.z <= 1023u &&
                    "Point coordinates must be in [0, 1023] range for voxelized coordinates");
         }
         
@@ -356,6 +357,57 @@ int main(int argc, char* argv[]) {
             cout << "Skipped (CPU mode selected)" << endl;
         }
         
+        // // GPU Octree Compression with nvCOMP lossless coding
+        // cout << "\n--- GPU Octree Compression with nvCOMP Lossless Coding ---" << endl;
+        // auto nvcomp_algorithms = get_all_nvcomp_algorithms();
+        
+        // for (auto algorithm : nvcomp_algorithms) {
+        //     string algo_name = nvcomp_algorithm_name(algorithm);
+        //     cout << "\n  Testing " << algo_name << "..." << endl;
+            
+        //     // Compress with nvCOMP
+        //     CompressionResult nvcomp_result = compress_gpu_octree(points, octree_depth, &algorithm);
+            
+        //     if (nvcomp_result.compression_time_ms > 0 && nvcomp_result.nvcomp_used) {
+        //         double octree_comp_time = nvcomp_result.compression_time_ms - nvcomp_result.nvcomp_compression_time_ms;
+        //         cout << "    Serialized size (before nvCOMP): " << nvcomp_result.serialized_size_bytes << " bytes (" 
+        //                   << (nvcomp_result.serialized_size_bytes / 1024.0) << " KB)" << endl;
+        //         cout << "    Octree compression time: " << octree_comp_time << " ms" << endl;
+        //         cout << "    nvCOMP compression time: " << nvcomp_result.nvcomp_compression_time_ms << " ms" << endl;
+        //         cout << "    Total compression time: " << nvcomp_result.compression_time_ms << " ms" << endl;
+        //         cout << "    Final compressed size: " << nvcomp_result.compressed_size_bytes << " bytes (" 
+        //                   << (nvcomp_result.compressed_size_bytes / 1024.0) << " KB)" << endl;
+        //         cout << "    Compression ratio (serialized/final): " 
+        //                   << (double)nvcomp_result.serialized_size_bytes / nvcomp_result.compressed_size_bytes << ":1" << endl;
+        //         cout << "    Compression ratio (original/final): " 
+        //                   << (double)nvcomp_result.original_size_bytes / nvcomp_result.compressed_size_bytes << ":1" << endl;
+        //         cout << "    Bits per point: " << (double)nvcomp_result.compressed_size_bytes * 8 / points.size() << " bpp" << endl;
+                
+        //         // Decompress and validate
+        //         string nvcomp_output = output_base + "/gpu_octree_nvcomp_" + algo_name + "/" + ptcl_number + ".ply";
+        //         fs::create_directories(fs::path(nvcomp_output).parent_path());
+                
+        //         DecompressionResult nvcomp_decomp = decompress_gpu_octree(
+        //             nvcomp_result.compressed_data, nvcomp_output, octree_depth, &algorithm);
+                
+        //         if (nvcomp_decomp.success) {
+        //             double octree_decomp_time = nvcomp_decomp.decompression_time_ms - nvcomp_decomp.nvcomp_decompression_time_ms;
+        //             cout << "    nvCOMP decompression time: " << nvcomp_decomp.nvcomp_decompression_time_ms << " ms" << endl;
+        //             cout << "    Octree decompression time: " << octree_decomp_time << " ms" << endl;
+        //             cout << "    Total decompression time: " << nvcomp_decomp.decompression_time_ms << " ms" << endl;
+        //             cout << "    Decompressed and saved to: " << nvcomp_output << endl;
+                    
+        //             // Validate lossless compression
+        //             cout << "    Validating lossless compression..." << endl;
+        //             validate_lossless_compression(points, nvcomp_output);
+        //         } else {
+        //             cerr << "    Failed to decompress with " << algo_name << endl;
+        //         }
+        //     } else {
+        //         cerr << "    Failed to compress with " << algo_name << endl;
+        //     }
+        // }
+        
         cout << "\n=========================================" << endl;
     }
     
@@ -363,3 +415,9 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+/**
+ * Run on redandblack: ./build/pointcloud_compression -i ../data/redandblack/Ply -o ../results/ -n 10 -d cuda:0 -t 10
+ * Run on longdress: ./build/pointcloud_compression -i ../data/longdress/Ply -o ../results/ -n 10 -d cuda:0 -t 10
+ * Run on loot: ./build/pointcloud_compression -i ../data/loot/Ply -o ../results/ -n 10 -d cuda:0 -t 10
+ * Run on soldier: ./build/pointcloud_compression -i ../data/soldier/Ply -o ../results/ -n 10 -d cuda:0 -t 10
+ */

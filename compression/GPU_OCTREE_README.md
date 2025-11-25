@@ -15,7 +15,14 @@ This implementation achieves **32:1 compression ratio** with **~4ms compression*
 
 ## Installation
 
-For dependencies, run `install_dependencies.sh`.
+## Dependencies
+
+- Tested on Ubuntu 20.04 with CUDA 11.8
+- NVComp 5.0.0.6 installed in CUDA 11.8:
+  - Dwonload tar.xz from `https://developer.nvidia.com/nvcomp-downloads?target_os=Linux&target_arch=x86_64&Distribution=Agnostic&cuda_version=11`
+  - Copy `nvcomp-linux-x86_64-5.0.0.6_cuda11-archive/include/*` to `~/cuda-11.8/include/`
+  - Copy `nvcomp-linux-x86_64-5.0.0.6_cuda11-archive/lib/*` to `~/cuda-11.8/lib64/`
+- For other dependencies, run `install_dependencies.sh`.
 
 ```{shell}
 mkdir build
