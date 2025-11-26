@@ -1,6 +1,7 @@
 #include "compression.h"
 #include "utils.h"
 #include "timer.h"
+#include "nvcomp_wrapper.h"
 #include <iostream>
 #include <vector>
 #include <cuda_runtime.h>
@@ -127,10 +128,17 @@ __global__ void reconstruct_points_kernel(
 }
 
 // --- Compression Function ---
-CompressionResult compress_gpu_octree(const std::vector<Point3D>& points, uint32_t octree_depth) {
+CompressionResult compress_gpu_octree(
+    const std::vector<Point3D>& points, 
+    uint32_t octree_depth,
+    nvcompAlgorithm* nvcomp_algorithm
+) {
     CompressionResult result;
     result.compression_time_ms = 0.0;
     result.compressed_data.clear();
+    result.serialized_size_bytes = 0;
+    result.nvcomp_compression_time_ms = 0.0;
+    result.nvcomp_used = (nvcomp_algorithm != nullptr);
 
     if (points.empty()) {
         std::cerr << "Error: Empty point cloud" << std::endl;
@@ -253,9 +261,55 @@ CompressionResult compress_gpu_octree(const std::vector<Point3D>& points, uint32
         bfs_offset += num_parents;
     }
 
-    // Copy final serialized bytestream from GPU to CPU (single transfer)
-    thrust::host_vector<uint8_t> h_serialized = d_serialized;
-    result.compressed_data.assign(h_serialized.begin(), h_serialized.end());
+    // Apply nvCOMP compression if requested
+    if (nvcomp_algorithm != nullptr) {
+        StopWatch nvcomp_sw;
+        
+        // Get max compressed size
+        size_t max_compressed_size = nvcomp_get_max_compressed_size(serialized_size, *nvcomp_algorithm);
+        thrust::device_vector<uint8_t> d_compressed(max_compressed_size);
+        
+        nvcompCompressionResult nvcomp_result = compress_nvcomp(
+            thrust::raw_pointer_cast(d_serialized.data()),
+            serialized_size,
+            *nvcomp_algorithm,
+            thrust::raw_pointer_cast(d_compressed.data()),
+            max_compressed_size
+        );
+        result.nvcomp_compression_time_ms = nvcomp_sw.ElapsedMs();
+        
+        if (!nvcomp_result.success) {
+            std::cerr << "Error: nvCOMP compression failed: " << nvcomp_result.error_message << std::endl;
+            // Fall back to uncompressed serialized data
+            thrust::host_vector<uint8_t> h_serialized = d_serialized;
+            result.compressed_data.assign(h_serialized.begin(), h_serialized.end());
+            result.serialized_size_bytes = serialized_size;
+            result.nvcomp_used = false;
+        } else {
+            // Store compressed data with header: [serialized_size (8 bytes)][nvcomp_compressed_data...]
+            thrust::host_vector<uint8_t> h_compressed(nvcomp_result.compressed_size_bytes);
+            checkCudaErrors(cudaMemcpy(h_compressed.data(), 
+                thrust::raw_pointer_cast(d_compressed.data()),
+                nvcomp_result.compressed_size_bytes, cudaMemcpyDeviceToHost));
+            
+            result.compressed_data.clear();
+            result.compressed_data.resize(sizeof(size_t) + nvcomp_result.compressed_size_bytes);
+            
+            // Write serialized size header
+            std::memcpy(result.compressed_data.data(), &serialized_size, sizeof(size_t));
+            
+            // Write nvCOMP compressed data
+            std::memcpy(result.compressed_data.data() + sizeof(size_t),
+                        h_compressed.data(), nvcomp_result.compressed_size_bytes);
+            
+            result.serialized_size_bytes = serialized_size;
+        }
+    } else {
+        // No nvCOMP compression - return serialized bytestream
+        thrust::host_vector<uint8_t> h_serialized = d_serialized;
+        result.compressed_data.assign(h_serialized.begin(), h_serialized.end());
+        result.serialized_size_bytes = serialized_size;
+    }
 
     result.compression_time_ms = sw.ElapsedMs();
 
@@ -267,11 +321,18 @@ CompressionResult compress_gpu_octree(const std::vector<Point3D>& points, uint32
 }
 
 // --- Decompression Function ---
-DecompressionResult decompress_gpu_octree(const std::vector<uint8_t>& compressed_data, const std::string& output_path, uint32_t octree_depth) {
+DecompressionResult decompress_gpu_octree(
+    const std::vector<uint8_t>& compressed_data, 
+    const std::string& output_path, 
+    uint32_t octree_depth,
+    nvcompAlgorithm* nvcomp_algorithm
+) {
     DecompressionResult result;
     result.output_path = output_path;
     result.success = false;
     result.decompression_time_ms = 0.0;
+    result.nvcomp_decompression_time_ms = 0.0;
+    result.nvcomp_used = (nvcomp_algorithm != nullptr);
 
     if (compressed_data.empty()) {
         std::cerr << "Error: Empty compressed data" << std::endl;
@@ -279,6 +340,67 @@ DecompressionResult decompress_gpu_octree(const std::vector<uint8_t>& compressed
     }
 
     StopWatch sw;
+    
+    // Step 1: Decompress with nvCOMP if requested
+    thrust::device_vector<uint8_t> d_serialized;
+    size_t serialized_size = 0;
+    
+    if (nvcomp_algorithm != nullptr) {
+        StopWatch nvcomp_sw;
+        
+        // Read serialized size from header
+        if (compressed_data.size() < sizeof(size_t)) {
+            std::cerr << "Error: Compressed data too small for header" << std::endl;
+            return result;
+        }
+        
+        std::memcpy(&serialized_size, compressed_data.data(), sizeof(size_t));
+        
+        // Extract nvCOMP compressed data (skip header)
+        std::vector<uint8_t> nvcomp_compressed_data(
+            compressed_data.begin() + sizeof(size_t),
+            compressed_data.end()
+        );
+        
+        // Upload compressed data to GPU
+        thrust::device_vector<uint8_t> d_compressed(nvcomp_compressed_data.begin(), nvcomp_compressed_data.end());
+        
+        // Allocate output buffer for decompressed data
+        d_serialized.resize(serialized_size);
+        
+        nvcompDecompressionResult nvcomp_result = decompress_nvcomp(
+            thrust::raw_pointer_cast(d_compressed.data()),
+            nvcomp_compressed_data.size(),
+            serialized_size,
+            *nvcomp_algorithm,
+            thrust::raw_pointer_cast(d_serialized.data())
+        );
+        result.nvcomp_decompression_time_ms = nvcomp_sw.ElapsedMs();
+        
+        if (!nvcomp_result.success) {
+            std::cerr << "Error: nvCOMP decompression failed: " << nvcomp_result.error_message << std::endl;
+            return result;
+        }
+        
+        if (nvcomp_result.decompressed_size_bytes != serialized_size) {
+            std::cerr << "Error: Decompressed size mismatch. Expected " << serialized_size 
+                      << " bytes, got " << nvcomp_result.decompressed_size_bytes << " bytes" << std::endl;
+            return result;
+        }
+    } else {
+        // No nvCOMP - assume uncompressed serialized bytestream
+        d_serialized = thrust::device_vector<uint8_t>(compressed_data.begin(), compressed_data.end());
+        serialized_size = compressed_data.size();
+    }
+    
+    // Copy decompressed/serialized data to host for deserialization
+    thrust::host_vector<uint8_t> h_serialized = d_serialized;
+    std::vector<uint8_t> serialized_data(h_serialized.begin(), h_serialized.end());
+    
+    // Start octree decompression timing
+    StopWatch octree_sw;
+
+    // Step 2: Deserialize and reconstruct octree
     size_t offset = 0;
 
     // Calculate reconstruction shift for depths < 10
@@ -286,13 +408,13 @@ DecompressionResult decompress_gpu_octree(const std::vector<uint8_t>& compressed
     int shift = (octree_depth < MAX_DEPTH) ? (MAX_DEPTH - octree_depth) : 0;
 
     // Read metadata (optimized format for voxelized coordinates)
-    if (compressed_data.size() < sizeof(uint32_t)) {
+    if (serialized_data.size() < sizeof(uint32_t)) {
         std::cerr << "Error: Invalid compressed data format" << std::endl;
         return result;
     }
 
     uint32_t num_levels;
-    std::memcpy(&num_levels, compressed_data.data() + offset, sizeof(uint32_t));
+    std::memcpy(&num_levels, serialized_data.data() + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
     
     // Validate that num_levels matches expected octree_depth
@@ -306,23 +428,23 @@ DecompressionResult decompress_gpu_octree(const std::vector<uint8_t>& compressed
     // Read level sizes
     std::vector<uint32_t> level_sizes(num_levels);
     for (uint32_t i = 0; i < num_levels; ++i) {
-        if (offset + sizeof(uint32_t) > compressed_data.size()) {
+        if (offset + sizeof(uint32_t) > serialized_data.size()) {
             std::cerr << "Error: Invalid compressed data format (level sizes)" << std::endl;
             return result;
         }
-        std::memcpy(&level_sizes[i], compressed_data.data() + offset, sizeof(uint32_t));
+        std::memcpy(&level_sizes[i], serialized_data.data() + offset, sizeof(uint32_t));
         offset += sizeof(uint32_t);
     }
 
     // Read BFS stream
-    size_t bfs_stream_size = compressed_data.size() - offset;
+    size_t bfs_stream_size = serialized_data.size() - offset;
     if (bfs_stream_size == 0) {
         std::cerr << "Error: Empty BFS stream" << std::endl;
         return result;
     }
 
     thrust::host_vector<uint8_t> h_bfs_stream(bfs_stream_size);
-    std::memcpy(h_bfs_stream.data(), compressed_data.data() + offset, bfs_stream_size);
+    std::memcpy(h_bfs_stream.data(), serialized_data.data() + offset, bfs_stream_size);
     thrust::device_vector<uint8_t> d_bfs_stream = h_bfs_stream;
 
     // Reconstruct octree levels from BFS stream using GPU kernels
@@ -404,7 +526,9 @@ DecompressionResult decompress_gpu_octree(const std::vector<uint8_t>& compressed
     thrust::host_vector<uint32_t> h_reconstructed_y = d_reconstructed_y;
     thrust::host_vector<uint32_t> h_reconstructed_z = d_reconstructed_z;
 
-    result.decompression_time_ms = sw.ElapsedMs();
+    // Record octree decompression time separately
+    double octree_decomp_time_ms = octree_sw.ElapsedMs();
+    result.decompression_time_ms = sw.ElapsedMs();  // Total time (nvCOMP + octree)
 
     // Convert to Point3D format
     std::vector<Point3D> points;
