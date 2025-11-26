@@ -31,33 +31,27 @@ mkdir build
 
 The CMakeLists.txt now supports 3 ways to specify CUDA installation:
 
-  1. Auto-detection (Default)
-
-```{shell}
-  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-  cmake --build build -j$(nproc)
-```
-
-  2. CMake Option (User-specified)
+  1. User-specified CUDA Path
 
 ```{shell}
   cmake -S . -B build -DCUDA_ROOT=/custom/path/to/cuda -DCMAKE_BUILD_TYPE=Release
   cmake --build build -j$(nproc)
 ```
 
-  3. Environment Variable
+  2. Environment Variable
 
 ```{shell}
   export CUDA_ROOT=/custom/path/to/cuda
+  # Alternative: export CUDA_HOME=/custom/path/to/cuda
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
   cmake --build build -j$(nproc)
 ```
 
-  Or:
+  3. Auto-detection (Default)
 
 ```{shell}
-  export CUDA_HOME=/custom/path/to/cuda  # Alternative variable
-  cmake -S . -B build
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+  cmake --build build -j$(nproc)
 ```
 
   Priority Order:
