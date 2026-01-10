@@ -671,7 +671,12 @@ class Runner:
                     "w",
                 ) as f:
                     json.dump(stats, f)
-                data = {"step": step, "splats": self.splats.state_dict()}
+                data = {
+                    "step": step,
+                    "splats": self.splats.state_dict(),
+                    "val_indices": self.parser.val_indices,
+                    "train_indices": self.trainset.indices,
+                }
                 if cfg.pose_opt:
                     if world_size > 1:
                         data["pose_adjust"] = self.pose_adjust.module.state_dict()
