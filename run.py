@@ -61,7 +61,7 @@ class Method:
     """
 
 # ================= Global Configurations =================
-method = Method.eval
+method = Method.train
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # =========================================================
 
@@ -70,8 +70,8 @@ if __name__ == '__main__':
     default_cfg = Config(strategy=DefaultStrategy(verbose=True))
     default_cfg.adjust_steps(default_cfg.steps_scaler)
     
-    # read the template of yaml from file
-    template_path = "./configs/default.toml"
+    # read configs from yaml file
+    template_path = "./configs/actorshq.toml"
     cfg = load_config_from_toml(template_path)
     cfg = merge_config(default_cfg, cfg)
     
@@ -80,16 +80,14 @@ if __name__ == '__main__':
         cfg.exp_name = exp_name
         set_result_dir(cfg, exp_name=exp_name)
         
-        cfg.disable_viewer = False
         iter = cfg.max_steps
         ckpt = [os.path.join(f"{cfg.result_dir}/ckpts/ckpt_{iter - 1}_rank0.pt")]
         print(f"\nEvaluating")
         evaluate_frame(cfg, ckpt)
     elif method == Method.train:
-        exp_name = f"test"
+        exp_name = f"train"
         cfg.exp_name = exp_name
         set_result_dir(cfg, exp_name=exp_name)
         
-        cfg.disable_viewer = False
         print(f"\nTraining")
         train_frame(cfg)

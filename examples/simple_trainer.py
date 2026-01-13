@@ -412,6 +412,16 @@ class Runner:
             render_colors[~masks] = 0
         return render_colors, render_alphas, info
 
+    def _safe_lpips(self, preds: Tensor, targets: Tensor) -> Tensor:
+        """Compute LPIPS with a cuDNN fallback for known internal errors."""
+        try:
+            return self.lpips(preds, targets)
+        except RuntimeError as exc:
+            if "CUDNN_STATUS_INTERNAL_ERROR" not in str(exc):
+                raise
+            with torch.backends.cudnn.flags(enabled=False):
+                return self.lpips(preds, targets)
+
     def train(self):
         cfg = self.cfg
         device = self.device
@@ -674,8 +684,12 @@ class Runner:
                 data = {
                     "step": step,
                     "splats": self.splats.state_dict(),
-                    "val_indices": self.parser.val_indices,
-                    "train_indices": self.trainset.indices,
+                    "val_indices": torch.as_tensor(
+                        self.parser.val_indices, dtype=torch.int64
+                    ),
+                    "train_indices": torch.as_tensor(
+                        self.trainset.indices, dtype=torch.int64
+                    ),
                 }
                 if cfg.pose_opt:
                     if world_size > 1:
@@ -866,13 +880,13 @@ class Runner:
                 colors_p = colors.permute(0, 3, 1, 2)  # [1, 3, H, W]
                 metrics["psnr"].append(self.psnr(colors_p, pixels_p))
                 metrics["ssim"].append(self.ssim(colors_p, pixels_p))
-                metrics["lpips"].append(self.lpips(colors_p, pixels_p))
+                metrics["lpips"].append(self._safe_lpips(colors_p, pixels_p))
                 if cfg.use_bilateral_grid:
                     cc_colors = color_correct(colors, pixels)
                     cc_colors_p = cc_colors.permute(0, 3, 1, 2)  # [1, 3, H, W]
                     metrics["cc_psnr"].append(self.psnr(cc_colors_p, pixels_p))
                     metrics["cc_ssim"].append(self.ssim(cc_colors_p, pixels_p))
-                    metrics["cc_lpips"].append(self.lpips(cc_colors_p, pixels_p))
+                    metrics["cc_lpips"].append(self._safe_lpips(cc_colors_p, pixels_p))
 
         if world_rank == 0:
             ellipse_time /= len(valloader)
