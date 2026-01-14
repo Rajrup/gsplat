@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import ClassVar, Optional
+from typing import ClassVar
 import os
 import sys
 
@@ -26,7 +26,6 @@ def run_experiment(config: Config, dist=False):
         main2(0, 0, 1, config) # single GPU training
 
 def train_frame(frame_id, config: Config, exp_name=None):
-    config.data_dir = os.path.join(config.actorshq_data_dir, f"{frame_id}", f"resolution_{config.resolution}")
     config.exp_name = exp_name
     config.scene_id = frame_id
     set_result_dir(config, exp_name)
@@ -46,7 +45,6 @@ def train_frame(frame_id, config: Config, exp_name=None):
     run_experiment(config, dist=False)
 
 def evaluate_frame(frame_id, iter, config: Config, exp_name, sub_exp_name=None):
-    config.data_dir = os.path.join(config.actorshq_data_dir, f"{frame_id}", f"resolution_{config.resolution}")
     config.exp_name = exp_name
     if sub_exp_name is not None:
         config.exp_name = f"{exp_name}_{sub_exp_name}"
