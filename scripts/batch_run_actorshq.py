@@ -9,9 +9,9 @@ from dataclasses import dataclass
 
 # ================= Configuration =================
 # Modify these lists to specify which actors, sequences, and frames to run
-ACTORS = ["Actor01"]  # e.g., ["Actor01", "Actor02", "Actor03"]
+ACTORS = ["Actor01", "Actor02", "Actor03", "Actor04", "Actor05", "Actor06", "Actor07", "Actor08"]
 SEQUENCES = ["Sequence1"]  # e.g., ["Sequence1", "Sequence2"]
-FRAME_IDS = [0]]
+FRAME_IDS = [0]
 
 # Method: "train" or "eval"
 METHOD = "train"
@@ -24,6 +24,9 @@ BASE_DATA_DIR = "/synology/actorshq/colmap"
 
 # Resolution (1, 2, or 4)
 RESOLUTION = 4
+
+# Root run path (working directory for running experiments)
+ROOT_RUN_PATH = "/ssd1/haodongw/workspace/3dstream/gsplat"
 # ================================================
 
 
@@ -135,7 +138,7 @@ elif "{config.method}" == "eval":
 
     # Run the script
     cmd = ["python", temp_script]
-    result = subprocess.run(cmd, env=env, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    result = subprocess.run(cmd, env=env, cwd=ROOT_RUN_PATH)
 
     # Clean up temp script
     os.remove(temp_script)
