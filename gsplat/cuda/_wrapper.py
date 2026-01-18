@@ -253,11 +253,7 @@ def proj(
     Ks: Tensor,  # [..., C, 3, 3]
     width: int,
     height: int,
-<<<<<<< HEAD
-    camera_model: Literal["pinhole", "ortho", "fisheye"] = "pinhole",
-=======
     camera_model: Literal["pinhole", "ortho", "fisheye", "ftheta"] = "pinhole",
->>>>>>> b60e917c95afc449c5be33a634f1f457e116ff5e
 ) -> Tuple[Tensor, Tensor]:
     """Projection of Gaussians (perspective or orthographic).
 
