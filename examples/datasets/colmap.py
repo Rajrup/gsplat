@@ -271,12 +271,15 @@ class Parser:
         self.point_indices = point_indices  # Dict[str, np.ndarray], image_name -> [M,]
         self.transform = transform  # np.ndarray, (4, 4)
 
+<<<<<<< HEAD
         # Randomly select validation indices to avoid systematic bias in selecting validation cameras
         indices = np.arange(len(self.image_names))
         num_val = len(self.image_names) // self.test_every
         self.val_indices = np.random.choice(indices, size=num_val, replace=False)
         print(f"Randomly selected {num_val} validation cameras to avoid systematic bias")
 
+=======
+>>>>>>> b60e917c95afc449c5be33a634f1f457e116ff5e
         # load one image to check the size. In the case of tanksandtemples dataset, the
         # intrinsics stored in COLMAP corresponds to 2x upsampled images.
         actual_image = imageio.imread(self.image_paths[0])[..., :3]

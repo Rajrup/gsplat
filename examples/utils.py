@@ -1,7 +1,7 @@
 import random
+
 import numpy as np
 import torch
-from typing import Tuple
 from sklearn.neighbors import NearestNeighbors
 from torch import Tensor
 import torch.nn.functional as F

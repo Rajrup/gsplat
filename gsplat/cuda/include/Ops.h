@@ -489,7 +489,12 @@ projection_ut_3dgs_fused(
     ShutterType rs_type,
     const at::optional<at::Tensor> radial_coeffs,     // [..., C, 6] or [..., C, 4] optional
     const at::optional<at::Tensor> tangential_coeffs, // [..., C, 2] optional
+<<<<<<< HEAD
     const at::optional<at::Tensor> thin_prism_coeffs  // [..., C, 4] optional
+=======
+    const at::optional<at::Tensor> thin_prism_coeffs,  // [..., C, 4] optional
+    const FThetaCameraDistortionParameters ftheta_coeffs // shared parameters for all cameras
+>>>>>>> b60e917c95afc449c5be33a634f1f457e116ff5e
 );
 
 std::tuple<at::Tensor, at::Tensor, at::Tensor>
@@ -518,6 +523,10 @@ rasterize_to_pixels_from_world_3dgs_fwd(
     const at::optional<at::Tensor> radial_coeffs,     // [..., C, 6] or [..., C, 4] optional
     const at::optional<at::Tensor> tangential_coeffs, // [..., C, 2] optional
     const at::optional<at::Tensor> thin_prism_coeffs, // [..., C, 4] optional
+<<<<<<< HEAD
+=======
+    const FThetaCameraDistortionParameters ftheta_coeffs, // shared parameters for all cameras
+>>>>>>> b60e917c95afc449c5be33a634f1f457e116ff5e
     // intersections
     const at::Tensor tile_offsets, // [..., C, tile_height, tile_width]
     const at::Tensor flatten_ids   // [n_isects]
@@ -549,6 +558,7 @@ rasterize_to_pixels_from_world_3dgs_bwd(
     const at::optional<at::Tensor> radial_coeffs,     // [..., C, 6] or [..., C, 4] optional
     const at::optional<at::Tensor> tangential_coeffs, // [..., C, 2] optional
     const at::optional<at::Tensor> thin_prism_coeffs, // [..., C, 4] optional
+    const FThetaCameraDistortionParameters ftheta_coeffs, // shared parameters for all cameras
     // intersections
     const at::Tensor tile_offsets,    // [..., C, tile_height, tile_width]
     const at::Tensor flatten_ids,     // [n_isects]
