@@ -26,7 +26,7 @@ BASE_DATA_DIR = "/synology/actorshq/colmap"
 RESOLUTION = 4
 
 # Root run path (working directory for running experiments)
-ROOT_RUN_PATH = "/ssd1/haodongw/workspace/3dstream/gsplat"
+ROOT_RUN_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # ================================================
 
 
@@ -36,7 +36,7 @@ class RunConfig:
     sequence: str
     frame_id: int
     method: str = "train"
-    cuda_device: str = "0"
+    cuda_device: str = "1"
 
 
 def build_data_dir(actor: str, sequence: str, resolution: int = 4) -> str:
@@ -63,7 +63,7 @@ def run_single_experiment(config: RunConfig):
     script_content = f'''
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, "{ROOT_RUN_PATH}")
 from examples.simple_trainer import main2
 from gsplat.strategy import DefaultStrategy
 from examples.config import Config, load_config_from_toml, merge_config
