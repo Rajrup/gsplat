@@ -1,7 +1,7 @@
 import random
+
 import numpy as np
 import torch
-from typing import Tuple
 from sklearn.neighbors import NearestNeighbors
 from torch import Tensor
 import torch.nn.functional as F
@@ -481,7 +481,7 @@ class Metrics:
         colors: torch.Tensor,  # [1, H, W, 3]
         pixels: torch.Tensor,  # [1, H, W, 3]  
         masks: torch.Tensor,   # [1, H, W], bool
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate masked sum of squared errors (SE) and root mean squared errors (RMSE)."""
         if masks.sum() == 0:
             # No valid pixels in mask

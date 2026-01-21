@@ -9,6 +9,8 @@ from typing_extensions import Literal
 
 from .cuda._wrapper import (
     RollingShutterType,
+    FThetaCameraDistortionParameters,
+    FThetaPolynomialType,
     fully_fused_projection,
     fully_fused_projection_2dgs,
     fully_fused_projection_with_ut,
@@ -26,6 +28,81 @@ from .distributed import (
     all_to_all_tensor_list,
 )
 from .utils import depth_to_normal, get_projection_matrix
+
+
+def _compute_view_dirs_packed(
+    means: Tensor,  # [..., N, 3]
+    campos: Tensor,  # [..., C, 3]
+    batch_ids: Tensor,  # [nnz]
+    camera_ids: Tensor,  # [nnz]
+    gaussian_ids: Tensor,  # [nnz]
+    indptr: Tensor,  # [B*C+1]
+    B: int,
+    C: int,
+) -> Tensor:
+    """Compute view directions for packed Gaussian-camera pairs.
+
+    This function computes the view directions (means - campos) for each
+    Gaussian-camera pair in the packed format. It automatically selects between
+    a simple vectorized approach or an optimized loop-based approach based on
+    the data size and whether campos requires gradients.
+
+    Args:
+        means: The 3D centers of the Gaussians. [..., N, 3]
+        campos: Camera positions in world coordinates [..., C, 3]
+        batch_ids: The batch indices of the projected Gaussians. Int32 tensor of shape [nnz].
+        camera_ids: The camera indices of the projected Gaussians. Int32 tensor of shape [nnz].
+        gaussian_ids: The column indices of the projected Gaussians. Int32 tensor of shape [nnz].
+        indptr: CSR-style index pointer into gaussian_ids for batch-camera pairs. Int32 tensor of shape [B*C+1].
+        B: Number of batches
+        C: Number of cameras
+
+    Returns:
+        dirs: View directions [nnz, 3]
+    """
+    N = means.shape[-2]
+    nnz = batch_ids.shape[0]
+    device = means.device
+    means_flat = means.view(B, N, 3)
+    campos_flat = campos.view(B, C, 3)
+
+    if B * C == 1:
+        # Single batch-camera pair. No indexed lookup for campos is needed.
+        dirs = means_flat[0, gaussian_ids] - campos_flat[0, 0]  # [nnz, 3]
+    else:
+        avg_means_per_camera = nnz / (B * C)
+        split_batch_camera_ops = (
+            avg_means_per_camera > 10000
+            and campos_flat.is_cuda
+            and campos_flat.requires_grad
+        )
+
+        if not split_batch_camera_ops:
+            # Simple vectorized indexing for campos.
+            dirs = (
+                means_flat[batch_ids, gaussian_ids] - campos_flat[batch_ids, camera_ids]
+            )  # [nnz, 3]
+        else:
+            # For large N with pose optimization: split into B*C separate operations
+            # to avoid many-to-one indexing of campos in backward pass. This speeds up the
+            # backwards pass and is more impactful when GPU occupancy is high.
+            dirs = torch.empty((nnz, 3), dtype=means_flat.dtype, device=device)
+            indptr_cpu = indptr.cpu()
+            for b_idx in range(B):
+                for c_idx in range(C):
+                    bc_idx = b_idx * C + c_idx
+                    start_idx = indptr_cpu[bc_idx].item()
+                    end_idx = indptr_cpu[bc_idx + 1].item()
+                    if start_idx == end_idx:
+                        continue
+
+                    # Get the gaussian indices for this batch-camera pair and compute dirs
+                    gids = gaussian_ids[start_idx:end_idx]
+                    dirs[start_idx:end_idx] = (
+                        means_flat[b_idx, gids] - campos_flat[b_idx, c_idx]
+                    )
+
+    return dirs
 
 
 def rasterization(
@@ -52,7 +129,7 @@ def rasterization(
     rasterize_mode: Literal["classic", "antialiased"] = "classic",
     channel_chunk: int = 32,
     distributed: bool = False,
-    camera_model: Literal["pinhole", "ortho", "fisheye"] = "pinhole",
+    camera_model: Literal["pinhole", "ortho", "fisheye", "ftheta"] = "pinhole",
     segmented: bool = False,
     covars: Optional[Tensor] = None,
     with_ut: bool = False,
@@ -61,6 +138,7 @@ def rasterization(
     radial_coeffs: Optional[Tensor] = None,  # [..., C, 6] or [..., C, 4]
     tangential_coeffs: Optional[Tensor] = None,  # [..., C, 2]
     thin_prism_coeffs: Optional[Tensor] = None,  # [..., C, 4]
+    ftheta_coeffs: Optional[FThetaCameraDistortionParameters] = None,
     # rolling shutter
     rolling_shutter: RollingShutterType = RollingShutterType.GLOBAL,
     viewmats_rs: Optional[Tensor] = None,  # [..., C, 4, 4]
@@ -198,7 +276,7 @@ def rasterization(
             The input Gaussians are expected to be a subset of scene in each rank, and
             the function will collaboratively render the images for all ranks.
         camera_model: The camera model to use. Supported models are "pinhole", "ortho",
-            and "fisheye". Default is "pinhole".
+            "fisheye", and "ftheta". Default is "pinhole".
         segmented: Whether to use segmented radix sort. Default is False.
             Segmented radix sort performs sorting in segments, which is more efficient for the sorting operation itself.
             However, since it requires offset indices as input, additional global memory access is needed, which results
@@ -215,6 +293,8 @@ def rasterization(
             The shape should be [..., C, 2] if provided.
         thin_prism_coeffs: Opencv pinhole thin prism distortion coefficients. Default is None.
             The shape should be [..., C, 4] if provided.
+        ftheta_coeffs: F-Theta camera distortion coefficients shared for all cameras.
+            Default is None. See `FThetaCameraDistortionParameters` for details.
         rolling_shutter: The rolling shutter type. Default `RollingShutterType.GLOBAL` means
             global shutter.
         viewmats_rs: The second viewmat when rolling shutter is used. Default is None.
@@ -329,6 +409,7 @@ def rasterization(
         radial_coeffs is not None
         or tangential_coeffs is not None
         or thin_prism_coeffs is not None
+        or ftheta_coeffs is not None
         or rolling_shutter != RollingShutterType.GLOBAL
     ):
         assert (
@@ -393,6 +474,7 @@ def rasterization(
             radial_coeffs=radial_coeffs,
             tangential_coeffs=tangential_coeffs,
             thin_prism_coeffs=thin_prism_coeffs,
+            ftheta_coeffs=ftheta_coeffs,
             rolling_shutter=rolling_shutter,
             viewmats_rs=viewmats_rs,
         )
@@ -425,6 +507,7 @@ def rasterization(
             batch_ids,
             camera_ids,
             gaussian_ids,
+            indptr,
             radii,
             means2d,
             depths,
@@ -439,7 +522,7 @@ def rasterization(
         opacities = torch.broadcast_to(
             opacities[..., None, :], batch_dims + (C, N)
         )  # [..., C, N]
-        batch_ids, camera_ids, gaussian_ids = None, None, None
+        indptr, batch_ids, camera_ids, gaussian_ids = None, None, None, None
         image_ids = None
 
     if compensations is not None:
@@ -486,10 +569,17 @@ def rasterization(
             campos_rs = torch.inverse(viewmats_rs)[..., :3, 3]
             campos = 0.5 * (campos + campos_rs)  # [..., C, 3]
         if packed:
-            dirs = (
-                means.view(B, N, 3)[batch_ids, gaussian_ids]
-                - campos.view(B, C, 3)[batch_ids, camera_ids]
+            dirs = _compute_view_dirs_packed(
+                means,
+                campos,
+                batch_ids,
+                camera_ids,
+                gaussian_ids,
+                indptr,
+                B,
+                C,
             )  # [nnz, 3]
+
             masks = (radii > 0).all(dim=-1)  # [nnz]
             if colors.dim() == num_batch_dims + 3:
                 # Turn [..., N, K, 3] into [nnz, 3]
@@ -688,6 +778,7 @@ def rasterization(
                     radial_coeffs=radial_coeffs,
                     tangential_coeffs=tangential_coeffs,
                     thin_prism_coeffs=thin_prism_coeffs,
+                    ftheta_coeffs=ftheta_coeffs,
                     rolling_shutter=rolling_shutter,
                     viewmats_rs=viewmats_rs,
                 )
@@ -730,6 +821,7 @@ def rasterization(
                 radial_coeffs=radial_coeffs,
                 tangential_coeffs=tangential_coeffs,
                 thin_prism_coeffs=thin_prism_coeffs,
+                ftheta_coeffs=ftheta_coeffs,
                 rolling_shutter=rolling_shutter,
                 viewmats_rs=viewmats_rs,
             )
