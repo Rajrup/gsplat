@@ -13,16 +13,17 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # ================= Configuration =================
 # Modify these lists to specify which actors, sequences, and frames to run
-ACTORS = ["Actor01", "Actor02", "Actor03", "Actor04", "Actor05", "Actor06", "Actor07", "Actor08"]
+# ACTORS = ["Actor01", "Actor02", "Actor03", "Actor04", "Actor05", "Actor06", "Actor07", "Actor08"]
+ACTORS = ["Actor06", "Actor02"]
 SEQUENCES = ["Sequence1"]  # e.g., ["Sequence1", "Sequence2"]
-FRAME_IDS = [0]
+FRAME_IDS = [1]
 
 # Method: "train" or "eval"
 METHOD = "train"
 
 # GPUs to use (list of GPU IDs, e.g., ["0", "1", "2", "3"] or ["0"])
 # Jobs will be distributed across these GPUs in parallel
-CUDA_DEVICES = ["0", "1"]
+CUDA_DEVICES = ["0", "1", "2", "3"]
 
 # Base data directory
 BASE_DATA_DIR = "/synology/actorshq/colmap"
@@ -32,6 +33,9 @@ RESOLUTION = 4
 
 # Root run path (working directory for running experiments)
 ROOT_RUN_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+# Path to the run_actorshq.py script
+RUN_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "run_actorshq.py")
 # ================================================
 
 
@@ -44,109 +48,39 @@ class RunConfig:
     cuda_device: str = "1"
 
 
-def build_data_dir(actor: str, sequence: str, resolution: int = 4) -> str:
-    """Build the data directory path for a given actor and sequence."""
-    return f"{BASE_DATA_DIR}/{actor}/{sequence}/{resolution}x/frames"
+def build_data_dir(actor: str, sequence: str, frame_id: int, resolution: int = 4) -> str:
+    """Build the data directory path for a given actor, sequence, and frame."""
+    return f"{BASE_DATA_DIR}/{actor}/{sequence}/{resolution}x/frames/frame{frame_id}"
 
 
 def run_single_experiment(config: RunConfig):
     """Run a single experiment with the given configuration."""
-    data_dir = build_data_dir(config.actor, config.sequence, RESOLUTION)
+    data_dir = build_data_dir(config.actor, config.sequence, config.frame_id, RESOLUTION)
+    exp_name_prefix = f"{config.actor}_{config.sequence}"
 
     print(f"\n{'='*60}")
     print(f"Running: Actor={config.actor}, Sequence={config.sequence}, Frame={config.frame_id}")
     print(f"Data dir: {data_dir}")
     print(f"Method: {config.method}")
+    print(f"GPU: {config.cuda_device}")
     print(f"{'='*60}\n")
 
     # Set environment variables
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = config.cuda_device
 
-    # Build the command - we'll modify the config via command line or temp config
-    # For simplicity, we'll create a modified version of the script inline
-    script_content = f'''
-import sys
-import os
-sys.path.insert(0, "{ROOT_RUN_PATH}")
-from examples.simple_trainer import main2
-from gsplat.strategy import DefaultStrategy
-from examples.config import Config, load_config_from_toml, merge_config
-from scripts.utils import set_result_dir
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "{config.cuda_device}"
-
-# Build default config
-default_cfg = Config(strategy=DefaultStrategy(verbose=True))
-default_cfg.adjust_steps(default_cfg.steps_scaler)
-
-# Load template config
-template_path = "./configs/actorshq.toml"
-cfg = load_config_from_toml(template_path)
-cfg = merge_config(default_cfg, cfg)
-
-# Override data directory
-cfg.data_dir = "{data_dir}/frame{config.frame_id}"
-
-# Build experiment name
-exp_name = f"{config.actor}_{config.sequence}_l1_{{1.0 - cfg.ssim_lambda}}_ssim_{{cfg.ssim_lambda}}"
-if cfg.masked_l1_loss:
-    exp_name += f"_ml1_{{cfg.masked_l1_lambda}}"
-if cfg.masked_ssim_loss:
-    exp_name += f"_mssim_{{cfg.masked_ssim_lambda}}"
-if cfg.alpha_loss:
-    exp_name += f"_alpha_{{cfg.alpha_lambda}}"
-if cfg.scale_var_loss:
-    exp_name += f"_svar_{{cfg.scale_var_lambda}}"
-if cfg.random_bkgd:
-    exp_name += "_rbkgd"
-
-cfg.disable_viewer = True
-frame_id = {config.frame_id}
-
-if "{config.method}" == "train":
-    cfg.exp_name = exp_name
-    cfg.scene_id = frame_id
-    set_result_dir(cfg, exp_name)
-    cfg.run_mode = "train"
-    cfg.save_ply = True
-    cfg.max_steps = 30000
-    cfg.save_steps = list(sorted(set(range(0, cfg.max_steps + 1, 10000)) | {{1}}))
-    cfg.ply_steps = cfg.save_steps
-    cfg.eval_steps = cfg.save_steps
-    cfg.init_type = "sfm"
-    cfg.strategy = DefaultStrategy(verbose=True)
-
-    print(f"Training frame {{frame_id}}")
-    print(f"exp_name={{cfg.exp_name}}, scene_id={{cfg.scene_id}}, run_mode={{cfg.run_mode}}")
-    main2(0, 0, 1, cfg)
-
-elif "{config.method}" == "eval":
-    cfg.exp_name = exp_name
-    cfg.run_mode = "eval"
-    cfg.init_type = "sfm"
-    cfg.save_ply = False
-    cfg.scene_id = frame_id
-    set_result_dir(cfg, exp_name=exp_name)
-    iter = cfg.max_steps
-    ckpt = os.path.join(f"{{cfg.result_dir}}/ckpts/ckpt_{{iter - 1}}_rank0.pt")
-    cfg.ckpt = ckpt
-
-    print(f"Evaluating frame {{frame_id}}")
-    main2(0, 0, 1, cfg)
-'''
-
-    # Write temp script and run it
-    temp_script = f"/tmp/run_actorshq_{config.actor}_{config.sequence}_{config.frame_id}.py"
-    with open(temp_script, "w") as f:
-        f.write(script_content)
+    # Build the command to call run_actorshq.py
+    cmd = [
+        "python", RUN_SCRIPT_PATH,
+        "--data_dir", data_dir,
+        "--frame_id", str(config.frame_id),
+        "--method", config.method,
+        "--exp_name_prefix", exp_name_prefix,
+        "--disable_viewer",
+    ]
 
     # Run the script
-    cmd = ["python", temp_script]
     result = subprocess.run(cmd, env=env, cwd=ROOT_RUN_PATH)
-
-    # Clean up temp script
-    os.remove(temp_script)
 
     return result.returncode
 

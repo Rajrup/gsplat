@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Optional
+import argparse
 import os
 import sys
 
@@ -10,6 +11,23 @@ from gsplat.strategy import DefaultStrategy
 
 from examples.config import Config, load_config_from_toml, merge_config
 from scripts.utils import set_result_dir
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run ActorsHQ training/evaluation")
+    parser.add_argument("--data_dir", type=str, default=None,
+                        help="Path to the data directory (overrides config)")
+    parser.add_argument("--frame_id", type=int, default=None,
+                        help="Frame ID to train/evaluate")
+    parser.add_argument("--method", type=str, choices=["train", "eval"], default=None,
+                        help="Method: train or eval")
+    parser.add_argument("--exp_name_prefix", type=str, default="actorshq",
+                        help="Prefix for experiment name (e.g., 'Actor02_Sequence1')")
+    parser.add_argument("--config", type=str, default="./configs/actorshq.toml",
+                        help="Path to config file")
+    parser.add_argument("--disable_viewer", action="store_true",
+                        help="Disable the viewer")
+    return parser.parse_args()
 
 def run_experiment(config: Config, dist=False):
     print(
@@ -73,59 +91,73 @@ class Method:
     """
 
 # ================= Global Configurations =================
-method = Method.train
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# These are used when running without command-line arguments
+DEFAULT_METHOD = Method.train
+DEFAULT_CUDA_DEVICE = "0"
+DEFAULT_START_FRAME = 0
+DEFAULT_END_FRAME = 0
 # =========================================================
 
-if __name__ == '__main__':    
-    # build default config
+
+def build_exp_name(cfg: Config, prefix: str = "actorshq") -> str:
+    """Build experiment name based on config settings."""
+    exp_name = f"{prefix}_l1_{1.0 - cfg.ssim_lambda}_ssim_{cfg.ssim_lambda}"
+    if cfg.masked_l1_loss:
+        exp_name += f"_ml1_{cfg.masked_l1_lambda}"
+    if cfg.masked_ssim_loss:
+        exp_name += f"_mssim_{cfg.masked_ssim_lambda}"
+    if cfg.alpha_loss:
+        exp_name += f"_alpha_{cfg.alpha_lambda}"
+    if cfg.scale_var_loss:
+        exp_name += f"_svar_{cfg.scale_var_lambda}"
+    if cfg.random_bkgd:
+        exp_name += "_rbkgd"
+    return exp_name
+
+
+if __name__ == '__main__':
+    args = parse_args()
+
+    # Set CUDA device if not already set by parent process
+    if "CUDA_VISIBLE_DEVICES" not in os.environ:
+        os.environ["CUDA_VISIBLE_DEVICES"] = DEFAULT_CUDA_DEVICE
+
+    # Build default config
     default_cfg = Config(strategy=DefaultStrategy(verbose=True))
     default_cfg.adjust_steps(default_cfg.steps_scaler)
-    
-    # read the template of yaml from file
-    template_path = "./configs/actorshq.toml"
+
+    # Read the template config from file
+    template_path = args.config
     cfg = load_config_from_toml(template_path)
     cfg = merge_config(default_cfg, cfg)
-    
-    if method == Method.eval:
-        exp_name = f"actorshq_l1_{1.0 - cfg.ssim_lambda}_ssim_{cfg.ssim_lambda}"
-        if cfg.masked_l1_loss:
-            exp_name += f"_ml1_{cfg.masked_l1_lambda}"
-        if cfg.masked_ssim_loss:
-            exp_name += f"_mssim_{cfg.masked_ssim_lambda}"
-        if cfg.alpha_loss:
-            exp_name += f"_alpha_{cfg.alpha_lambda}"
-        if cfg.scale_var_loss:
-            exp_name += f"_svar_{cfg.scale_var_lambda}"
-        if cfg.random_bkgd:
-            exp_name += "_rbkgd"
-        # exp_name = exp_name + "_test"
-        
-        cfg.disable_viewer = False
-        iter = cfg.max_steps
-        start_frame_id = 0
-        end_frame_id = 0
-        
+
+    # Override data_dir if provided
+    if args.data_dir is not None:
+        cfg.data_dir = args.data_dir
+
+    # Determine method
+    method = args.method if args.method else DEFAULT_METHOD
+
+    # Determine frame range
+    if args.frame_id is not None:
+        start_frame_id = args.frame_id
+        end_frame_id = args.frame_id
+    else:
+        start_frame_id = DEFAULT_START_FRAME
+        end_frame_id = DEFAULT_END_FRAME
+
+    # Build experiment name
+    exp_name = build_exp_name(cfg, args.exp_name_prefix)
+
+    # Set viewer
+    cfg.disable_viewer = args.disable_viewer
+
+    if method == Method.eval or method == "eval":
+        iter_num = cfg.max_steps
         for frame_id in range(start_frame_id, end_frame_id + 1):
             print(f"\nEvaluating frame {frame_id}")
-            evaluate_frame(frame_id, iter, cfg, exp_name)
-    elif method == Method.train:
-        exp_name = f"actorshq_l1_{1.0 - cfg.ssim_lambda}_ssim_{cfg.ssim_lambda}"
-        if cfg.masked_l1_loss:
-            exp_name += f"_ml1_{cfg.masked_l1_lambda}"
-        if cfg.masked_ssim_loss:
-            exp_name += f"_mssim_{cfg.masked_ssim_lambda}"
-        if cfg.alpha_loss:
-            exp_name += f"_alpha_{cfg.alpha_lambda}"
-        if cfg.scale_var_loss:
-            exp_name += f"_svar_{cfg.scale_var_lambda}"
-        if cfg.random_bkgd:
-            exp_name += "_rbkgd"
-        # exp_name = exp_name + "_test"
-        
-        cfg.disable_viewer = False
-        start_frame_id = 0
-        end_frame_id = 0
+            evaluate_frame(frame_id, iter_num, cfg, exp_name)
+    elif method == Method.train or method == "train":
         for frame_id in range(start_frame_id, end_frame_id + 1):
             print(f"\nTraining frame {frame_id}")
             train_frame(frame_id, cfg, exp_name)
