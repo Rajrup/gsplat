@@ -49,7 +49,7 @@ def train_frame(frame_id, config: Config, exp_name=None):
     set_result_dir(config, exp_name)
     config.run_mode = "train"
     config.save_ply = True
-    config.max_steps = 30000
+    config.max_steps = 50000
     config.save_steps = list(sorted(set(range(0, config.max_steps + 1, 10000)) | {1}))
     print(config.save_steps)
     config.ply_steps = config.save_steps

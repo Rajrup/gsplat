@@ -194,13 +194,28 @@ class SceneManager:
 
                 if is_camera_description_line:
                     image_id = int(data[0])
-                    image = Image(data[-1], int(data[-2]),
-                                  Quaternion(np.array(map(float, data[1:5]))),
-                                  np.array(map(float, data[5:8])))
+                    image = Image(
+                        data[-1],
+                        int(data[-2]),
+                        Quaternion(
+                            np.fromiter(map(float, data[1:5]), dtype=np.float64)
+                        ),
+                        np.fromiter(map(float, data[5:8]), dtype=np.float64),
+                    )
                 else:
                     image.points2D = np.array(
-                        [map(float, data[::3]), map(float, data[1::3])]).T
-                    image.point3D_ids = np.array(map(np.uint64, data[2::3]))
+                        [
+                            np.fromiter(map(float, data[::3]), dtype=np.float64),
+                            np.fromiter(map(float, data[1::3]), dtype=np.float64),
+                        ]
+                    ).T
+                    image.point3D_ids = np.fromiter(
+                        (
+                            SceneManager.INVALID_POINT3D if v == -1 else v
+                            for v in map(int, data[2::3])
+                        ),
+                        dtype=np.uint64,
+                    )
 
                     # automatically remove points without an associated 3D point
                     #mask = (image.point3D_ids != SceneManager.INVALID_POINT3D)
@@ -272,13 +287,17 @@ class SceneManager:
 
                 self.point3D_ids.append(point3D_id)
                 self.point3D_id_to_point3D_idx[point3D_id] = len(self.points3D)
-                self.points3D.append(map(np.float64, data[1:4]))
-                self.point3D_colors.append(map(np.uint8, data[4:7]))
+                self.points3D.append(
+                    np.fromiter(map(np.float64, data[1:4]), dtype=np.float64)
+                )
+                self.point3D_colors.append(
+                    np.fromiter(map(np.uint8, data[4:7]), dtype=np.uint8)
+                )
                 self.point3D_errors.append(np.float64(data[7]))
 
                 # load (image id, point2D idx) pairs
                 self.point3D_id_to_images[point3D_id] = \
-                    np.array(map(np.uint32, data[8:])).reshape(-1, 2)
+                    np.fromiter(map(np.uint32, data[8:]), dtype=np.uint32).reshape(-1, 2)
 
         self.points3D = np.array(self.points3D)
         self.point3D_ids = np.array(self.point3D_ids)

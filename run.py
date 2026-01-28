@@ -71,7 +71,7 @@ if __name__ == '__main__':
     default_cfg.adjust_steps(default_cfg.steps_scaler)
     
     # read configs from yaml file
-    template_path = "./configs/actorshq.toml"
+    template_path = "./configs/drjohnson.toml"
     cfg = load_config_from_toml(template_path)
     cfg = merge_config(default_cfg, cfg)
     
