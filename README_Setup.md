@@ -17,7 +17,7 @@ pip install -e . --no-build-isolation
 # Alternative Method 2: Use legacy mode
 # pip install -e . --use-pep517=false
 
-pip install -r examples/requirements.txt
+pip install -r examples/requirements.txt --no-build-isolation
 pip install jaxtyping
 pip install toml ipykernel jupyter wandb
 pip install open3d
