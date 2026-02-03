@@ -703,6 +703,7 @@ class Runner:
                     "train_indices": torch.as_tensor(
                         self.trainset.indices, dtype=torch.int64
                     ),
+                    "image_names": self.parser.image_names,
                 }
                 if cfg.pose_opt:
                     if world_size > 1:
@@ -855,12 +856,18 @@ class Runner:
         )
         ellipse_time = 0
         metrics = defaultdict(list)
+        per_image_metrics = []  # Store per-image results
         for i, data in enumerate(valloader):
             camtoworlds = data["camtoworld"].to(device)
             Ks = data["K"].to(device)
             pixels = data["image"].to(device) / 255.0
             masks = data["mask"].to(device) if "mask" in data else None
             height, width = pixels.shape[1:3]
+
+            # Get image name for this validation sample
+            image_id = data["image_id"].item()
+            parser_idx = self.valset.indices[image_id]
+            image_name = self.parser.image_names[parser_idx]
 
             torch.cuda.synchronize()
             tic = time.time()
@@ -875,31 +882,60 @@ class Runner:
                 masks=masks,
             )  # [1, H, W, 3]
             torch.cuda.synchronize()
-            ellipse_time += max(time.time() - tic, 1e-10)
+            render_time = max(time.time() - tic, 1e-10)
+            ellipse_time += render_time
 
             colors = torch.clamp(colors, 0.0, 1.0)
-            canvas_list = [pixels, colors]
 
             if world_rank == 0:
-                # write images
-                canvas = torch.cat(canvas_list, dim=2).squeeze(0).cpu().numpy()
-                canvas = (canvas * 255).astype(np.uint8)
-                imageio.imwrite(
-                    f"{self.render_dir}/{stage}_step{step}_{i:04d}.png",
-                    canvas,
-                )
+                # write images: render, gt, and comparison
+                frame_dir = f"{self.render_dir}/{stage}_step{step}_{i:04d}"
+                os.makedirs(frame_dir, exist_ok=True)
+
+                render_np = (colors.squeeze(0).cpu().numpy() * 255).astype(np.uint8)
+                gt_np = (pixels.squeeze(0).cpu().numpy() * 255).astype(np.uint8)
+                comparison_np = np.concatenate([render_np, gt_np], axis=1)
+
+                imageio.imwrite(f"{frame_dir}/render.png", render_np)
+                imageio.imwrite(f"{frame_dir}/gt.png", gt_np)
+                imageio.imwrite(f"{frame_dir}/comparison.png", comparison_np)
 
                 pixels_p = pixels.permute(0, 3, 1, 2)  # [1, 3, H, W]
                 colors_p = colors.permute(0, 3, 1, 2)  # [1, 3, H, W]
-                metrics["psnr"].append(self.psnr(colors_p, pixels_p))
-                metrics["ssim"].append(self.ssim(colors_p, pixels_p))
-                metrics["lpips"].append(self._safe_lpips(colors_p, pixels_p))
+                psnr_val = self.psnr(colors_p, pixels_p)
+                ssim_val = self.ssim(colors_p, pixels_p)
+                lpips_val = self._safe_lpips(colors_p, pixels_p)
+                metrics["psnr"].append(psnr_val)
+                metrics["ssim"].append(ssim_val)
+                metrics["lpips"].append(lpips_val)
+
+                # Store per-image metrics
+                per_image_result = {
+                    "image_name": image_name,
+                    "image_index": i,
+                    "parser_index": int(parser_idx),
+                    "psnr": psnr_val.item(),
+                    "ssim": ssim_val.item(),
+                    "lpips": lpips_val.item(),
+                    "render_time": render_time,
+                }
+
                 if cfg.use_bilateral_grid:
                     cc_colors = color_correct(colors, pixels)
                     cc_colors_p = cc_colors.permute(0, 3, 1, 2)  # [1, 3, H, W]
-                    metrics["cc_psnr"].append(self.psnr(cc_colors_p, pixels_p))
-                    metrics["cc_ssim"].append(self.ssim(cc_colors_p, pixels_p))
-                    metrics["cc_lpips"].append(self._safe_lpips(cc_colors_p, pixels_p))
+                    cc_psnr_val = self.psnr(cc_colors_p, pixels_p)
+                    cc_ssim_val = self.ssim(cc_colors_p, pixels_p)
+                    cc_lpips_val = self._safe_lpips(cc_colors_p, pixels_p)
+                    metrics["cc_psnr"].append(cc_psnr_val)
+                    metrics["cc_ssim"].append(cc_ssim_val)
+                    metrics["cc_lpips"].append(cc_lpips_val)
+                    per_image_result.update({
+                        "cc_psnr": cc_psnr_val.item(),
+                        "cc_ssim": cc_ssim_val.item(),
+                        "cc_lpips": cc_lpips_val.item(),
+                    })
+
+                per_image_metrics.append(per_image_result)
 
         if world_rank == 0:
             ellipse_time /= len(valloader)
@@ -927,6 +963,9 @@ class Runner:
             # save stats as json
             with open(f"{self.stats_dir}/{stage}_step{step:04d}.json", "w") as f:
                 json.dump(stats, f)
+            # save per-image metrics as json
+            with open(f"{self.stats_dir}/{stage}_step{step:04d}_per_image.json", "w") as f:
+                json.dump(per_image_metrics, f, indent=2)
             # save stats to tensorboard
             for k, v in stats.items():
                 self.writer.add_scalar(f"{stage}/{k}", v, step)
