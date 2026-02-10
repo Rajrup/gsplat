@@ -27,6 +27,12 @@ def parse_args():
                         help="Path to config file")
     parser.add_argument("--disable_viewer", action="store_true",
                         help="Disable the viewer")
+    parser.add_argument("--test_every", type=int, default=None,
+                        help="Every N images is a test image (overrides config)")
+    parser.add_argument("--val_indices", type=str, default=None,
+                        help="Comma-separated validation view indices (overrides test_every)")
+    parser.add_argument("--train_indices", type=str, default=None,
+                        help="Comma-separated training view indices (overrides test_every)")
     return parser.parse_args()
 
 def run_experiment(config: Config, dist=False):
@@ -148,6 +154,14 @@ if __name__ == '__main__':
 
     # Build experiment name
     exp_name = build_exp_name(cfg, args.exp_name_prefix)
+
+    # Override test_every / val/train indices if provided via CLI
+    if args.test_every is not None:
+        cfg.test_every = args.test_every
+    if args.val_indices is not None:
+        cfg.val_indices = [int(x) for x in args.val_indices.split(",")]
+    if args.train_indices is not None:
+        cfg.train_indices = [int(x) for x in args.train_indices.split(",")]
 
     # Set viewer
     cfg.disable_viewer = args.disable_viewer

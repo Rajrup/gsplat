@@ -16,6 +16,9 @@ scene_id = 0
 resolution = 4 # Resolution of the actorshq dataset (1, 2, 4)
 data_factor = 1  # Downsample factor for the dataset. ActorsHQ dataset is already downsampled with correct intrinsics.
 test_every = 8  # Every N images is a test image
+# val_indices = [0, 8, 16, 24]    # Manual validation view indices (overrides test_every)
+# train_indices = [1, 2, 3, 5, 7]  # Manual training view indices (overrides test_every)
+
 # patch_size = null  # Random crop size for training (experimental)
 # global_scale = 1.0  # Global scale factor for scene size
 # normalize_world_space = true  # Normalize the world space

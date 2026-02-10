@@ -199,6 +199,8 @@ class Runner:
             factor=cfg.data_factor,
             normalize=cfg.normalize_world_space,
             test_every=cfg.test_every,
+            val_indices=cfg.val_indices,
+            train_indices=cfg.train_indices,
         )
         self.trainset = Dataset(
             self.parser,

@@ -68,6 +68,8 @@ class Parser:
         factor: int = 1,
         normalize: bool = False,
         test_every: int = 8,
+        val_indices: Optional[List[int]] = None,
+        train_indices: Optional[List[int]] = None,
     ):
         self.data_dir = data_dir
         self.factor = factor
@@ -271,11 +273,19 @@ class Parser:
         self.point_indices = point_indices  # Dict[str, np.ndarray], image_name -> [M,]
         self.transform = transform  # np.ndarray, (4, 4)
 
-        # Randomly select validation indices to avoid systematic bias in selecting validation cameras
+        # Determine train/val split
         indices = np.arange(len(self.image_names))
-        num_val = len(self.image_names) // self.test_every
-        self.val_indices = np.random.choice(indices, size=num_val, replace=False)
-        print(f"Randomly selected {num_val} validation cameras to avoid systematic bias")
+        if val_indices is not None:
+            self.val_indices = np.array(val_indices, dtype=np.int64)
+            print(f"[Parser] Using {len(self.val_indices)} manual validation indices: {sorted(self.val_indices.tolist())}")
+        elif train_indices is not None:
+            train_set = set(train_indices)
+            self.val_indices = np.array([i for i in indices if i not in train_set], dtype=np.int64)
+            print(f"[Parser] Using {len(train_indices)} manual training indices; {len(self.val_indices)} views assigned to validation")
+        else:
+            num_val = len(self.image_names) // self.test_every
+            self.val_indices = np.random.choice(indices, size=num_val, replace=False)
+            print(f"[Parser] Randomly selected {num_val} validation cameras (test_every={self.test_every})")
 
         # load one image to check the size. In the case of tanksandtemples dataset, the
         # intrinsics stored in COLMAP corresponds to 2x upsampled images.

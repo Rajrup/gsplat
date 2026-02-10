@@ -8,8 +8,8 @@ Usage:
 import subprocess
 import os
 import itertools
-from dataclasses import dataclass
-from typing import List, Tuple
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
@@ -26,14 +26,18 @@ DATASET_CONFIGS = {
         "frame_ids": [1],
         "resolution": 4,
         "config_path": "./configs/actorshq.toml",
+        "test_every": 8,
     },
     "neural3d": {
         "base_data_dir": "/synology/Neural_3D_Video",
         "sequences": ["coffee_martini", "cook_spinach", "cut_roasted_beef",
-                      # "flame_salmon_1", "flame_steak", "sear_steak"
+                      "flame_salmon_1", "flame_steak", "sear_steak"
                       ],
         "frame_ids": [0],
         "config_path": "./configs/actorshq.toml",
+        # "test_every": 8,
+        "val_indices": [0, 20],
+        "train_indices": [i for i in range(0, 21) if i not in [0, 20]],
     },
 }
 # =========================================================
@@ -50,6 +54,9 @@ class JobConfig:
     config_path: str = "./configs/actorshq.toml"
     run_script_path: str = ""
     root_run_path: str = ""
+    test_every: Optional[int] = None
+    val_indices: Optional[List[int]] = None
+    train_indices: Optional[List[int]] = None
 
 
 def build_data_dir_actorshq(cfg: dict, actor: str, sequence: str, frame_id: int) -> str:
@@ -70,6 +77,9 @@ def create_jobs_actorshq(cfg: dict, method: str, cuda_devices: List[str],
     sequences = cfg.get("sequences", [])
     frame_ids = cfg.get("frame_ids", [])
     config_path = cfg.get("config_path", "./configs/actorshq.toml")
+    test_every = cfg.get("test_every", None)
+    val_indices = cfg.get("val_indices", None)
+    train_indices = cfg.get("train_indices", None)
 
     all_combinations = list(itertools.product(actors, sequences, frame_ids))
     num_gpus = len(cuda_devices)
@@ -91,6 +101,9 @@ def create_jobs_actorshq(cfg: dict, method: str, cuda_devices: List[str],
             config_path=config_path,
             run_script_path=run_script_path,
             root_run_path=root_run_path,
+            test_every=test_every,
+            val_indices=val_indices,
+            train_indices=train_indices,
         )
         jobs.append(job)
 
@@ -103,6 +116,9 @@ def create_jobs_neural3d(cfg: dict, method: str, cuda_devices: List[str],
     sequences = cfg.get("sequences", [])
     frame_ids = cfg.get("frame_ids", [])
     config_path = cfg.get("config_path", "./configs/actorshq.toml")
+    test_every = cfg.get("test_every", None)
+    val_indices = cfg.get("val_indices", None)
+    train_indices = cfg.get("train_indices", None)
 
     all_combinations = list(itertools.product(sequences, frame_ids))
     num_gpus = len(cuda_devices)
@@ -124,6 +140,9 @@ def create_jobs_neural3d(cfg: dict, method: str, cuda_devices: List[str],
             config_path=config_path,
             run_script_path=run_script_path,
             root_run_path=root_run_path,
+            test_every=test_every,
+            val_indices=val_indices,
+            train_indices=train_indices,
         )
         jobs.append(job)
 
@@ -158,6 +177,12 @@ def run_single_experiment(config: JobConfig) -> int:
         "--config", config.config_path,
         "--disable_viewer",
     ]
+    if config.test_every is not None:
+        cmd.extend(["--test_every", str(config.test_every)])
+    if config.val_indices is not None:
+        cmd.extend(["--val_indices", ",".join(str(i) for i in config.val_indices)])
+    if config.train_indices is not None:
+        cmd.extend(["--train_indices", ",".join(str(i) for i in config.train_indices)])
 
     result = subprocess.run(cmd, env=env, cwd=config.root_run_path)
     return result.returncode

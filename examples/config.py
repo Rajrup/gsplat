@@ -57,6 +57,10 @@ class Config:
     result_dir: str = "results/garden"
     # Every N images there is a test image
     test_every: int = 8
+    # Manual validation view indices (overrides test_every)
+    val_indices: Optional[List[int]] = None
+    # Manual training view indices (overrides test_every)
+    train_indices: Optional[List[int]] = None
     # Random crop size for training  (experimental)
     patch_size: Optional[int] = None
     # A global scaler that applies to the scene size related parameters
