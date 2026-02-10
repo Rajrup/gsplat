@@ -441,9 +441,11 @@ class Dataset:
             "camtoworld": torch.from_numpy(camtoworlds).float(),
             "image": torch.from_numpy(image).float(),
             "image_id": item,  # the index of the image in the dataset
-            "alpha_gt": torch.from_numpy(alpha_gt).float(),
-            "mask_gt": torch.from_numpy(mask_gt).bool()
         }
+        if alpha_gt is not None:
+            data["alpha_gt"] = torch.from_numpy(alpha_gt).float()
+        if mask_gt is not None:
+            data["mask_gt"] = torch.from_numpy(mask_gt).bool()
         if mask is not None:
             data["mask"] = torch.from_numpy(mask).bool()
 
